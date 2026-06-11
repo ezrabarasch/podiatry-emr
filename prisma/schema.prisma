@@ -1,0 +1,321 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Podiatry EMR — Prisma Schema
+// Stack: Next.js + PostgreSQL + Prisma + Docker on DigitalOcean
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum FacilityType {
+  SNF
+  ALF
+}
+
+enum VisitType {
+  new_patient
+  established
+}
+
+enum VisitStatus {
+  draft
+  signed
+}
+
+enum CareflowType {
+  at_risk_podiatry
+  // additional careflow types added here as we build them
+}
+
+enum PlaceOfService {
+  bedside
+  wheelchair
+}
+
+enum DataSource {
+  manual
+  pcc_import
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FACILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Facility {
+  id            String       @id @default(uuid())
+  name          String
+  facilityType  FacilityType
+  address       String?
+  npi           String?
+  pccFacilityId String?      // PCC's internal facility ID for linking
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  patients      Patient[]
+
+  @@map("facilities")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROVIDERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Provider {
+  id          String   @id @default(uuid())
+  firstName   String
+  lastName    String
+  credentials String?  // e.g. DPM
+  npi         String?
+  email       String   @unique
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  visits      Visit[]
+  accounts    Account[]
+
+  @@map("providers")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH — NextAuth
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(uuid())
+  providerId        String
+  type              String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  provider          Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([type, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  providerId   String
+  expires      DateTime
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATIENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Patient {
+  id           String       @id @default(uuid())
+  facilityId   String
+  pccPatientId String?      @unique // PCC's internal patient ID — links to PCC DB
+  firstName    String
+  lastName     String
+  dob          DateTime
+  facilityType FacilityType // copied from facility, denormalized for visit snapshot
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  facility     Facility     @relation(fields: [facilityId], references: [id])
+  visits       Visit[]
+
+  @@map("patients")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VISITS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Visit {
+  id             String         @id @default(uuid())
+  patientId      String
+  providerId     String
+  visitDate      DateTime
+  visitType      VisitType
+  facilityType   FacilityType   // snapshotted from patient at time of visit creation
+  placeOfService PlaceOfService?
+  careflowType   CareflowType   @default(at_risk_podiatry)
+  status         VisitStatus    @default(draft)
+  signedAt       DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  patient        Patient        @relation(fields: [patientId], references: [id])
+  provider       Provider       @relation(fields: [providerId], references: [id])
+
+  emrImport      VisitEmrImport?
+  fieldSelections VisitFieldSelection[]
+  note           VisitNote?
+
+  @@map("visits")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMR IMPORT — PCC data pulled at visit open time
+// ─────────────────────────────────────────────────────────────────────────────
+
+model VisitEmrImport {
+  id             String   @id @default(uuid())
+  visitId        String   @unique
+  pccPatientId   String?
+  vitals         Json     // { bp_status: "elevated_with_htn", ... }
+  medications    Json     // [{ name, dosage, frequency }, ...]
+  medicalHistory Json     // [{ icd10: "E11.9", description: "Type 2 Diabetes" }, ...]
+  pulledAt       DateTime @default(now())
+  rawResponse    Json?    // full source data for debugging
+
+  visit          Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@map("visit_emr_imports")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIELD SELECTIONS — raw checkbox/radio captures (source of truth for logic engine)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model VisitFieldSelection {
+  id        String   @id @default(uuid())
+  visitId   String
+  section   String   // e.g. "vascular_exam"
+  fieldKey  String   // e.g. "dp_pulse_right"
+  value     String   // e.g. "absent"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  visit     Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@unique([visitId, section, fieldKey]) // one value per field per visit
+  @@map("visit_field_selections")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VISIT NOTE — immutable snapshot created at sign-off
+// ─────────────────────────────────────────────────────────────────────────────
+
+model VisitNote {
+  id                   String   @id @default(uuid())
+  visitId              String   @unique
+  noteText             String   @db.Text  // fully assembled progress note
+  procedureNotes       Json?    // [{ label: "Procedure Note", text: "..." }, ...]
+  specialSections      Json?    // [{ label: "Smoking Cessation Counseling", text: "..." }, ...]
+  diagnoses            Json     // [{ icd10: "B35.1", description: "Tinea unguium" }, ...]
+  cptCodes             Json     // [{ code: "11721", description: "...", qualifier: "class_b" }, ...]
+  addendum             String?  @db.Text  // free-text addendum added before sign
+  vitalsSnapshot       Json?    // BP status at time of visit
+  medicationsSnapshot  Json?    // med list at time of sign
+  medicalHistorySnapshot Json?  // dx list at time of sign
+  billingAlerts        Json?    // [{ code: "11720", message: "Missing class B/C qualifier" }]
+  snapshotAt           DateTime @default(now())
+
+  visit                Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@map("visit_notes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAREFLOW RULES — the logic engine (conditional rules)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CareflowRule {
+  id                  String       @id @default(uuid())
+  careflowType        CareflowType @default(at_risk_podiatry)
+  section             String       // e.g. "vascular_exam"
+  fieldKey            String       // e.g. "dp_pulse_right"
+  fieldValue          String       // e.g. "absent"
+  noteFragment        String?      @db.Text
+  icd10Codes          Json?        // ["I73.9"]
+  cptCodes            Json?        // ["11720"]
+  cptQualifier        String?      // "class_a" | "class_b" | "class_c"
+  dxCondition         String?      // named condition e.g. "patient_is_diabetic"
+  sectionLabel        String?      // e.g. "Procedure Note", "Smoking Cessation Counseling"
+  procedureNarrative  String?      @db.Text
+  priority            Int          @default(0)
+  active              Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@unique([careflowType, section, fieldKey, fieldValue])
+  @@map("careflow_rules")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATIC FRAGMENTS — always-present text regardless of field selections
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CareflowStaticFragment {
+  id           String       @id @default(uuid())
+  careflowType CareflowType @default(at_risk_podiatry)
+  section      String
+  position     Int
+  fragmentText String       @db.Text
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@map("careflow_static_fragments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DERIVED RULES — fire based on generated DX codes, not field selections
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CareflowDerivedRule {
+  id             String       @id @default(uuid())
+  careflowType   CareflowType @default(at_risk_podiatry)
+  conditionName  String       // e.g. "pvd_dx_present"
+  triggerCodes   Json         // ["I73.9", "I70.21"]
+  noteFragment   String       @db.Text
+  outputSection  String       // e.g. "Assessment & Plan"
+  priority       Int          @default(0)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("careflow_derived_rules")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CPT QUALIFIER RULES — defines billing requirements per CPT
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CptQualifierRule {
+  id               String   @id @default(uuid())
+  cptCode          String   @unique
+  description      String
+  requiresQualifier Boolean @default(false)
+  minimumClass     String?  // "class_b or class_c"
+  notes            String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("cpt_qualifier_rules")
+}
