@@ -335,7 +335,34 @@ async function main() {
     })
   }
   console.log(`✓ ${cptRules.length} CPT qualifier rules seeded`)
+// ─────────────────────────────────────────────────────────────────────────
+  // TEST FACILITY + PATIENT
+  // ─────────────────────────────────────────────────────────────────────────
+  const facility = await prisma.facility.upsert({
+    where: { id: 'test-facility-001' },
+    update: {},
+    create: {
+      id: 'test-facility-001',
+      name: 'Sunrise Skilled Nursing Facility',
+      facilityType: 'SNF',
+      address: '123 Main Street, Brooklyn, NY 11201',
+      npi: '1234567890',
+    },
+  })
 
+  await prisma.patient.upsert({
+    where: { pccPatientId: 'test-pcc-001' },
+    update: {},
+    create: {
+      firstName: 'John',
+      lastName: 'Doe',
+      dob: new Date('1945-03-15'),
+      facilityId: facility.id,
+      facilityType: 'SNF',
+      pccPatientId: 'test-pcc-001',
+    },
+  })
+  console.log('✓ Test facility + patient seeded')
   console.log('✅ Database seeding complete')
 }
 
