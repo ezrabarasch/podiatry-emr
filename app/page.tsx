@@ -1,4 +1,4 @@
-// test auto-deploy
+// v1.2 deployment test
 import { redirect } from 'next/navigation'
 
 export default function Home() {
