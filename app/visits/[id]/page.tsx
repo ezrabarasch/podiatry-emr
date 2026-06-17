@@ -432,6 +432,8 @@ export default function VisitPage() {
   const [selections, setSelections] = useState<Selections>({})
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   useEffect(() => {
     if (session === null) router.push('/login')
@@ -493,6 +495,17 @@ export default function VisitPage() {
     })
     saveField(sectionId, fieldKey, checked ? checkValue : null)
   }, [saveField])
+
+  const handleCancelVisit = async () => {
+    setCancelling(true)
+    try {
+      await fetch(`/api/visits/${visitId}`, { method: 'DELETE' })
+      router.push(`/patients/${visit!.patient.id}`)
+    } catch {
+      setCancelling(false)
+      setShowCancelDialog(false)
+    }
+  }
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -612,7 +625,13 @@ export default function VisitPage() {
         ))}
 
         {/* Bottom CTA */}
-        <div className="flex justify-end pt-2 pb-16">
+        <div className="flex items-center justify-between pt-2 pb-16">
+          <button
+            onClick={() => setShowCancelDialog(true)}
+            className="text-sm font-medium text-red-600 hover:text-red-800 border border-red-300 hover:border-red-400 px-4 py-2.5 rounded-lg transition-colors"
+          >
+            Cancel Visit
+          </button>
           <button
             onClick={() => router.push(`/visits/${visitId}/note`)}
             className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors"
@@ -621,6 +640,34 @@ export default function VisitPage() {
           </button>
         </div>
       </main>
+
+      {/* Cancel Visit Dialog */}
+      {showCancelDialog && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl border border-slate-200 p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-base font-semibold text-slate-800 mb-2">Cancel Visit?</h3>
+            <p className="text-sm text-slate-600 mb-5">
+              Are you sure you want to discard changes to the visit information?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCancelDialog(false)}
+                disabled={cancelling}
+                className="flex-1 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 py-2.5 rounded-lg transition-colors"
+              >
+                Keep Editing
+              </button>
+              <button
+                onClick={handleCancelVisit}
+                disabled={cancelling}
+                className="flex-1 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed py-2.5 rounded-lg transition-colors"
+              >
+                {cancelling ? 'Cancelling...' : 'Yes, Cancel Visit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

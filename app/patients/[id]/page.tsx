@@ -99,7 +99,7 @@ export default function PatientPage() {
             onClick={() => router.push('/dashboard')}
             className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
           >
-            ← Patients
+            ← Patient List
           </button>
           <span className="text-slate-300">|</span>
           <h1 className="text-lg font-semibold text-slate-800">QWC Podiatry</h1>
@@ -161,7 +161,7 @@ export default function PatientPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Date</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Date of Service</th>
                     <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Type</th>
                     <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Provider</th>
                     <th className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>

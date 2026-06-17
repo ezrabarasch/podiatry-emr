@@ -52,6 +52,8 @@ export default function NotePage() {
   const [addendum, setAddendum] = useState('')
   const [signing, setSigning] = useState(false)
   const [signError, setSignError] = useState('')
+  const [savingAddendum, setSavingAddendum] = useState(false)
+  const [addendumSaveMsg, setAddendumSaveMsg] = useState<'saved' | 'error' | null>(null)
 
   useEffect(() => {
     if (session === null) router.push('/login')
@@ -83,6 +85,23 @@ export default function NotePage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const handleSaveAddendum = async () => {
+    setSavingAddendum(true)
+    setAddendumSaveMsg(null)
+    try {
+      await fetch(`/api/visits/${visitId}/fields`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ section: '_addendum', fieldKey: 'text', value: addendum.trim() || '' }),
+      })
+      setAddendumSaveMsg('saved')
+    } catch {
+      setAddendumSaveMsg('error')
+    } finally {
+      setSavingAddendum(false)
+    }
+  }
 
   const handleSign = async () => {
     if (!note) return
@@ -406,6 +425,20 @@ export default function NotePage() {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+                <button
+                  onClick={handleSaveAddendum}
+                  disabled={savingAddendum}
+                  className="w-full bg-slate-600 hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
+                >
+                  {savingAddendum ? 'Saving...' : 'Save Addendum'}
+                </button>
+                {addendumSaveMsg === 'saved' && (
+                  <p className="text-xs text-green-600 text-center">Addendum saved.</p>
+                )}
+                {addendumSaveMsg === 'error' && (
+                  <p className="text-xs text-red-600 text-center">Failed to save — try again.</p>
+                )}
+                <hr className="border-slate-100" />
                 {signError && (
                   <p className="text-xs text-red-600 font-medium bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                     {signError}

@@ -20,3 +20,19 @@ export async function GET(
 
   return NextResponse.json(visit)
 }
+
+export async function DELETE(
+  _req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { id } = await context.params
+
+  const visit = await prisma.visit.findUnique({ where: { id } })
+  if (!visit) return NextResponse.json({ error: 'Visit not found' }, { status: 404 })
+  if (visit.status === 'signed') {
+    return NextResponse.json({ error: 'Cannot delete a signed visit' }, { status: 400 })
+  }
+
+  await prisma.visit.delete({ where: { id } })
+  return NextResponse.json({ deleted: true })
+}

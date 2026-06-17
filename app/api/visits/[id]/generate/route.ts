@@ -233,7 +233,7 @@ export async function GET(
       qualifier: cptQualifierMap.get(code) ?? null,
     })),
     billingAlerts,
-    addendum: '',
+    addendum: fieldSelections.find(s => s.section === '_addendum' && s.fieldKey === 'text')?.value ?? '',
     isSigned: false,
   })
 }
