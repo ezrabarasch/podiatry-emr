@@ -76,23 +76,18 @@ export async function reconcilePatientMedications(
     const dosage = med.dosage ?? null
     const frequency = med.frequency ?? null
 
-    const record = await prisma.patientMedication.upsert({
-      where: {
-        patientId_name_dosage_frequency: { patientId, name: med.name, dosage, frequency },
-      },
-      update: {
-        lastConfirmedAt: new Date(),
-        lastConfirmedById: visitId,
-        active: true,
-      },
-      create: {
-        patientId,
-        name: med.name,
-        dosage,
-        frequency,
-        lastConfirmedById: visitId,
-      },
+    const existing = await prisma.patientMedication.findFirst({
+      where: { patientId, name: med.name, dosage, frequency },
     })
+
+    const record = existing
+      ? await prisma.patientMedication.update({
+          where: { id: existing.id },
+          data: { lastConfirmedAt: new Date(), lastConfirmedById: visitId, active: true },
+        })
+      : await prisma.patientMedication.create({
+          data: { patientId, name: med.name, dosage, frequency, lastConfirmedById: visitId },
+        })
 
     await prisma.patientMedicationAssertion.upsert({
       where: { patientMedicationId_visitId: { patientMedicationId: record.id, visitId } },
