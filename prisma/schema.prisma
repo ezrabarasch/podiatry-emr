@@ -33,6 +33,8 @@ enum VisitStatus {
 
 enum CareflowType {
   at_risk_podiatry
+  wound_care
+  // planned: cardiology, physiatry, ot_pt_sp, nutrition, psych, primary_care
   // additional careflow types added here as we build them
 }
 
@@ -146,6 +148,8 @@ model Patient {
 
   facility     Facility     @relation(fields: [facilityId], references: [id])
   visits       Visit[]
+  diagnoses    PatientDiagnosis[]
+  medications  PatientMedication[]
 
   @@map("patients")
 }
@@ -174,6 +178,8 @@ model Visit {
   emrImport      VisitEmrImport?
   fieldSelections VisitFieldSelection[]
   note           VisitNote?
+  diagnosisAssertions  PatientDiagnosisAssertion[]
+  medicationAssertions PatientMedicationAssertion[]
 
   @@map("visits")
 }
@@ -318,4 +324,164 @@ model CptQualifierRule {
   updatedAt        DateTime @updatedAt
 
   @@map("cpt_qualifier_rules")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATIENT-LEVEL DIAGNOSES — global, cross-service-line visibility.
+//
+// Populated only when a visit is SIGNED (not on draft saves), per product
+// decision: diagnoses become part of the shared chart at encounter sign-off,
+// not while a provider is still charting. One row per (patient, icd10) —
+// "no duplicates" means the same diagnosis code is never represented twice
+// for a patient, regardless of how many visits or service lines assert it.
+// Re-assertion by a later visit updates lastConfirmedAt/lastConfirmedBy
+// rather than creating a second row. Full history of which visit asserted
+// it when lives in PatientDiagnosisAssertion below, so nothing is lost.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PatientDiagnosis {
+  id                String       @id @default(uuid())
+  patientId         String
+  icd10             String
+  description       String
+  firstAssertedAt   DateTime     @default(now())
+  lastConfirmedAt   DateTime     @default(now())
+  lastConfirmedById String       // visitId of the most recent signed visit that asserted it
+  active            Boolean      @default(true) // set false if clinically resolved/retired
+
+  patient           Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  assertions        PatientDiagnosisAssertion[]
+
+  @@unique([patientId, icd10])
+  @@map("patient_diagnoses")
+}
+
+// Append-only provenance log — every signed visit that asserted a diagnosis,
+// even if PatientDiagnosis already existed (so "who said this, and when,
+// across which service lines" is always answerable).
+model PatientDiagnosisAssertion {
+  id                 String           @id @default(uuid())
+  patientDiagnosisId String
+  visitId            String
+  careflowType       CareflowType     // which service line asserted it
+  assertedAt         DateTime         @default(now())
+
+  patientDiagnosis   PatientDiagnosis @relation(fields: [patientDiagnosisId], references: [id], onDelete: Cascade)
+  visit              Visit            @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@unique([patientDiagnosisId, visitId])
+  @@map("patient_diagnosis_assertions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATIENT-LEVEL MEDICATIONS — same pattern as diagnoses: global visibility,
+// populated on sign, one row per (patient, name+dosage+frequency) to avoid
+// duplicates, with provenance preserved separately.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PatientMedication {
+  id                String       @id @default(uuid())
+  patientId         String
+  name              String
+  dosage            String?
+  frequency         String?
+  firstAssertedAt   DateTime     @default(now())
+  lastConfirmedAt   DateTime     @default(now())
+  lastConfirmedById String       // visitId of the most recent signed visit that asserted it
+  active            Boolean      @default(true) // set false if discontinued
+
+  patient           Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  assertions        PatientMedicationAssertion[]
+
+  @@unique([patientId, name, dosage, frequency])
+  @@map("patient_medications")
+}
+
+model PatientMedicationAssertion {
+  id                  String            @id @default(uuid())
+  patientMedicationId String
+  visitId             String
+  careflowType        CareflowType
+  assertedAt          DateTime          @default(now())
+
+  patientMedication   PatientMedication @relation(fields: [patientMedicationId], references: [id], onDelete: Cascade)
+  visit               Visit             @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@unique([patientMedicationId, visitId])
+  @@map("patient_medication_assertions")
+}
+
+enum CodeSystem {
+  icd10
+  cpt
+}
+
+model Code {
+  id          String     @id @default(uuid())
+  system      CodeSystem
+  code        String
+  description String
+
+  @@unique([system, code])
+  @@map("codes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAREFLOW FORM DEFINITION — drives the SectionCard/FieldRow renderer.
+// Mirrors the shape of the existing SECTIONS literal in app/visits/[id]/page.tsx
+// so the renderer needs no changes, only its data source does.
+//
+// `type` is a string, not an enum — across wound care, cardiology, physiatry,
+// OT/PT/SP, nutrition, psych, and primary care, the set of input types needed
+// (numeric measurement, free text, multi-select, body diagrams, etc.) is not
+// fully known yet and will keep growing. A closed enum would mean a schema
+// migration every time a new service line needs a new input shape. Instead,
+// `type` is looked up against a renderer registry in the app (see
+// lib/careflow/field-types.ts), and `config` holds whatever shape that
+// renderer needs (options for radio/multiselect, unit/min/max for numeric,
+// regions for a body diagram, etc.) so adding an input type is a new
+// registry entry, not a migration.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CareflowSection {
+  id           String       @id @default(uuid())
+  careflowType CareflowType @default(at_risk_podiatry)
+  sectionId    String       // e.g. "vascular_exam" — matches CareflowRule.section
+  label        String       // e.g. "Vascular Exam"
+  position     Int          @default(0)
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  groups       CareflowFieldGroup[]
+
+  @@unique([careflowType, sectionId])
+  @@map("careflow_sections")
+}
+
+model CareflowFieldGroup {
+  id          String          @id @default(uuid())
+  sectionId   String
+  groupLabel  String?
+  accentColor String?
+  position    Int             @default(0)
+
+  section     CareflowSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  fields      CareflowField[]
+
+  @@map("careflow_field_groups")
+}
+
+model CareflowField {
+  id         String             @id @default(uuid())
+  groupId    String
+  type       String             // looked up in the field-type renderer registry, e.g. "radio", "checkbox", "numeric", "free_text", "multi_select", "body_diagram"
+  fieldKey   String             // e.g. "dp_pulse_right" — matches CareflowRule.fieldKey
+  label      String
+  config     Json?              // shape depends on `type` — see lib/careflow/field-types.ts for each type's expected config
+  position   Int                @default(0)
+
+  group      CareflowFieldGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("careflow_fields")
 }
