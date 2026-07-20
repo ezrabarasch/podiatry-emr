@@ -5,9 +5,9 @@ import { getSessionUser, requireRole } from '@/lib/auth'
 export async function GET() {
   if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Return all patients (active + inactive); the dashboard filters client-side.
   const patients = await prisma.patient.findMany({
-    where: { active: true },
-    include: { facility: true },
+    include: { facility: true, _count: { select: { visits: true } } },
     orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
   })
 

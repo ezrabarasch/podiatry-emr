@@ -3,7 +3,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
-import Nav from '@/app/components/Nav'
+import PageShell from '@/app/components/PageShell'
+import Badge from '@/app/components/Badge'
+import Button from '@/app/components/Button'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -172,23 +174,30 @@ export default function NotePage() {
   const alertCodes = new Set(note.billingAlerts.map(a => a.code))
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Nav
-        left={
-          <>
-            <button
-              onClick={() => router.push(`/visits/${visitId}`)}
-              className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
-            >
-              ← {readOnly ? 'Visit Form' : 'Edit Form'}
-            </button>
-            <span className="text-slate-300">|</span>
-            <h1 className="text-lg font-semibold text-slate-800">QWC Podiatry</h1>
-          </>
-        }
-      />
+    <PageShell>
+      <div className="flex items-center justify-between mb-6">
+        <button
+          onClick={() => router.push(`/visits/${visitId}`)}
+          className="text-sm text-text-muted hover:text-text transition-colors"
+        >
+          ← {readOnly ? 'Visit Form' : 'Edit Form'}
+        </button>
+        {note.isSigned && (
+          <Button variant="secondary" onClick={() => window.open(`/api/visits/${visitId}/pdf`, '_blank')}>
+            Download PDF
+          </Button>
+        )}
+      </div>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      {/* Signed banner */}
+      {note.isSigned && (
+        <div className="bg-green-50 border border-green-200 rounded-xl px-5 py-3 mb-6 flex items-center gap-2">
+          <span className="text-success font-semibold text-sm">✓ Signed &amp; Locked</span>
+          {visit.signedAt && <span className="text-xs text-green-700">— {fmtDt(visit.signedAt)} by {visit.provider.firstName} {visit.provider.lastName}{visit.provider.credentials ? `, ${visit.provider.credentials}` : ''}</span>}
+        </div>
+      )}
+
+      <div>
         {/* Visit header */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
           <div className="flex items-start justify-between">
@@ -201,13 +210,7 @@ export default function NotePage() {
                 <span>·</span>
                 <span>{visit.patient.facility.name}</span>
                 <span>·</span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                  visit.patient.facilityType === 'SNF'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-purple-100 text-purple-700'
-                }`}>
-                  {visit.patient.facilityType}
-                </span>
+                <Badge variant={visit.patient.facilityType === 'SNF' ? 'snf' : 'alf'} label={visit.patient.facilityType} />
               </div>
             </div>
             <div className="text-right flex-shrink-0">
@@ -217,13 +220,7 @@ export default function NotePage() {
                   {visit.provider.firstName} {visit.provider.lastName}
                   {visit.provider.credentials && `, ${visit.provider.credentials}`}
                 </span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                  note.isSigned
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-yellow-100 text-yellow-700'
-                }`}>
-                  {note.isSigned ? 'Signed' : 'Draft'}
-                </span>
+                <Badge variant={note.isSigned ? 'signed' : 'draft'} label={note.isSigned ? 'Signed' : 'Draft'} />
               </div>
             </div>
           </div>
@@ -416,13 +413,9 @@ export default function NotePage() {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
-                <button
-                  onClick={handleSaveAddendum}
-                  disabled={savingAddendum}
-                  className="w-full bg-slate-600 hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
-                >
-                  {savingAddendum ? 'Saving...' : 'Save Addendum'}
-                </button>
+                <Button variant="ghost" className="w-full" onClick={handleSaveAddendum} loading={savingAddendum}>
+                  Save Addendum
+                </Button>
                 {addendumSaveMsg === 'saved' && (
                   <p className="text-xs text-green-600 text-center">Addendum saved.</p>
                 )}
@@ -440,13 +433,9 @@ export default function NotePage() {
                     Billing alerts present — please review before signing.
                   </p>
                 )}
-                <button
-                  onClick={handleSign}
-                  disabled={signing}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 rounded-lg transition-colors"
-                >
-                  {signing ? 'Signing...' : 'Sign & Lock Note'}
-                </button>
+                <Button variant="secondary" size="lg" className="w-full" onClick={handleSign} loading={signing}>
+                  Sign &amp; Lock Note
+                </Button>
                 <p className="text-xs text-slate-400 text-center leading-snug">
                   Signing is permanent and will lock the note.
                 </p>
@@ -455,7 +444,7 @@ export default function NotePage() {
 
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </PageShell>
   )
 }

@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminShell from '@/app/admin/AdminShell'
+import Badge from '@/app/components/Badge'
+import Button from '@/app/components/Button'
 
 interface AdminUser {
   id: string
@@ -17,10 +19,10 @@ interface AdminUser {
   lastLoginAt: string | null
 }
 
-function statusBadge(u: AdminUser) {
-  if (!u.active) return { label: 'Inactive', cls: 'bg-slate-100 text-slate-600' }
-  if (u.lockedAt) return { label: 'Locked', cls: 'bg-red-100 text-red-700' }
-  return { label: 'Active', cls: 'bg-green-100 text-green-700' }
+function statusBadge(u: AdminUser): { variant: 'active' | 'locked' | 'inactive'; label: string } {
+  if (!u.active) return { variant: 'inactive', label: 'Inactive' }
+  if (u.lockedAt) return { variant: 'locked', label: 'Locked' }
+  return { variant: 'active', label: 'Active' }
 }
 
 export default function AdminUsersPage() {
@@ -58,12 +60,7 @@ export default function AdminUsersPage() {
           <h2 className="text-2xl font-semibold text-slate-800">Users</h2>
           <p className="text-sm text-slate-500 mt-0.5">Manage providers, office staff, and admins</p>
         </div>
-        <button
-          onClick={() => router.push('/admin/users/new')}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
-        >
-          + New User
-        </button>
+        <Button size="lg" onClick={() => router.push('/admin/users/new')}>+ New User</Button>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -90,7 +87,7 @@ export default function AdminUsersPage() {
                     <td className="px-5 py-4 text-sm text-slate-600">{u.role}</td>
                     <td className="px-5 py-4 text-sm text-slate-600">{u.credentials ?? '—'}</td>
                     <td className="px-5 py-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${badge.cls}`}>{badge.label}</span>
+                      <Badge variant={badge.variant} label={badge.label} />
                     </td>
                     <td className="px-5 py-4 text-sm text-slate-600">{fmt(u.lastLoginAt)}</td>
                     <td className="px-5 py-4 text-right whitespace-nowrap">

@@ -3,7 +3,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
-import Nav from '@/app/components/Nav'
+import PageShell from '@/app/components/PageShell'
+import Badge from '@/app/components/Badge'
+import Button from '@/app/components/Button'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -537,42 +539,26 @@ export default function VisitPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Nav
-        left={
-          <>
-            <button
-              onClick={() => router.push(`/patients/${visit.patient.id}`)}
-              className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
-            >
-              ← {visit.patient.lastName}, {visit.patient.firstName}
-            </button>
-            <span className="text-slate-300">|</span>
-            <h1 className="text-lg font-semibold text-slate-800">QWC Podiatry</h1>
-          </>
-        }
-        right={
-          <>
-            {!readOnly && saveStatus === 'saving' && (
-              <span className="text-xs text-slate-400">Saving...</span>
-            )}
-            {!readOnly && saveStatus === 'saved' && (
-              <span className="text-xs text-green-600 font-medium">Saved ✓</span>
-            )}
-            {!readOnly && saveStatus === 'error' && (
-              <span className="text-xs text-red-500">Save failed</span>
-            )}
-            <button
-              onClick={() => router.push(`/visits/${visitId}/note`)}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
+    <PageShell>
+      <div className="max-w-4xl mx-auto">
+        {/* Action bar */}
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => router.push(`/patients/${visit.patient.id}`)}
+            className="text-sm text-text-muted hover:text-text transition-colors"
+          >
+            ← {visit.patient.lastName}, {visit.patient.firstName}
+          </button>
+          <div className="flex items-center gap-3">
+            {!readOnly && saveStatus === 'saving' && <span className="text-xs text-text-muted">Saving...</span>}
+            {!readOnly && saveStatus === 'saved' && <span className="text-xs text-success font-medium">Saved ✓</span>}
+            {!readOnly && saveStatus === 'error' && <span className="text-xs text-danger">Save failed</span>}
+            <Button onClick={() => router.push(`/visits/${visitId}/note`)}>
               {readOnly ? 'View Note →' : 'Generate Note →'}
-            </button>
-          </>
-        }
-      />
+            </Button>
+          </div>
+        </div>
 
-      <main className="max-w-4xl mx-auto px-6 py-8">
         {readOnly && (
           <div className="bg-amber-50 border border-amber-300 text-amber-800 text-sm rounded-lg px-4 py-3 mb-6">
             Read-only view — you do not have permission to edit visits.
@@ -591,13 +577,7 @@ export default function VisitPage() {
                 <span>·</span>
                 <span>{visit.patient.facility.name}</span>
                 <span>·</span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                  visit.patient.facilityType === 'SNF'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-purple-100 text-purple-700'
-                }`}>
-                  {visit.patient.facilityType}
-                </span>
+                <Badge variant={visit.patient.facilityType === 'SNF' ? 'snf' : 'alf'} label={visit.patient.facilityType} />
               </div>
             </div>
             <div className="text-right flex-shrink-0">
@@ -609,13 +589,7 @@ export default function VisitPage() {
                   {visit.provider.firstName} {visit.provider.lastName}
                   {visit.provider.credentials && `, ${visit.provider.credentials}`}
                 </span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                  visit.status === 'signed'
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-yellow-100 text-yellow-700'
-                }`}>
-                  {visit.status === 'signed' ? 'Signed' : 'Draft'}
-                </span>
+                <Badge variant={visit.status === 'signed' ? 'signed' : 'draft'} label={visit.status === 'signed' ? 'Signed' : 'Draft'} />
               </div>
             </div>
           </div>
@@ -638,21 +612,15 @@ export default function VisitPage() {
           {readOnly ? (
             <span />
           ) : (
-            <button
-              onClick={() => setShowCancelDialog(true)}
-              className="text-sm font-medium text-red-600 hover:text-red-800 border border-red-300 hover:border-red-400 px-4 py-2.5 rounded-lg transition-colors"
-            >
+            <Button variant="ghost" className="!text-danger !border-red-300 hover:!border-red-400" onClick={() => setShowCancelDialog(true)}>
               Cancel Visit
-            </button>
+            </Button>
           )}
-          <button
-            onClick={() => router.push(`/visits/${visitId}/note`)}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors"
-          >
+          <Button size="lg" onClick={() => router.push(`/visits/${visitId}/note`)}>
             {readOnly ? 'View Note →' : 'Generate Note →'}
-          </button>
+          </Button>
         </div>
-      </main>
+      </div>
 
       {/* Cancel Visit Dialog */}
       {showCancelDialog && (
@@ -681,6 +649,6 @@ export default function VisitPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

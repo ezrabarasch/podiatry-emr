@@ -46,6 +46,13 @@ enum DataSource {
   pcc_import
 }
 
+enum PayerType {
+  MEDICARE
+  MEDICAID
+  COMMERCIAL
+  OTHER
+}
+
 enum Role {
   PROVIDER
   OFFICE
@@ -69,6 +76,7 @@ model Facility {
   facilityType  FacilityType
   address       String?
   npi           String?
+  posCode       String?      // Place of Service code (e.g. "31" SNF, "13" ALF)
   pccFacilityId String?      // PCC's internal facility ID for linking
   active        Boolean      @default(true)
   createdAt     DateTime     @default(now())
@@ -138,14 +146,45 @@ model Patient {
   lastName     String
   dob          DateTime
   facilityType FacilityType // copied from facility, denormalized for visit snapshot
+  roomNumber      String?
+  admissionDate   DateTime?
+  dischargeDate   DateTime?
+  medicareNumber  String?
+  medicaidNumber  String?
+  primaryLanguage String?
+  isDeceased      Boolean   @default(false)
   active       Boolean      @default(true)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
   facility     Facility     @relation(fields: [facilityId], references: [id])
   visits       Visit[]
+  coverages    PatientCoverage[]
 
   @@map("patients")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATIENT COVERAGE — payer / insurance info (synced from PCC)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PatientCoverage {
+  id              String    @id @default(uuid())
+  patientId       String
+  payerName       String
+  payerType       PayerType
+  memberId        String?
+  groupId         String?
+  effectiveDate   DateTime?
+  terminationDate DateTime?
+  isPrimary       Boolean   @default(false)
+  active          Boolean   @default(true)
+  syncedAt        DateTime  @default(now())
+
+  patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("patient_coverages")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

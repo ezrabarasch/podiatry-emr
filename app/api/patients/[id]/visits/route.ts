@@ -15,7 +15,8 @@ export async function GET(
     include: {
       provider: {
         select: { firstName: true, lastName: true, credentials: true }
-      }
+      },
+      note: { select: { cptCodes: true } },
     },
     orderBy: { visitDate: 'desc' },
   })
