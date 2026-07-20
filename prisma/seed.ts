@@ -11,28 +11,30 @@ async function main() {
   console.log('🌱 Seeding database...')
 
   // ─────────────────────────────────────────────────────────────────────────
-  // PROVIDER
+  // USERS — one per role for testing
   // ─────────────────────────────────────────────────────────────────────────
-  const hashedPassword = await bcrypt.hash('changeme123', 12)
+  const seedUsers = [
+    { username: 'admin', password: 'admin123', firstName: 'Admin', lastName: 'User', role: 'ADMIN' as const, credentials: null },
+    { username: 'provider', password: 'provider123', firstName: 'Provider', lastName: 'User', role: 'PROVIDER' as const, credentials: 'DPM' },
+    { username: 'office', password: 'office123', firstName: 'Office', lastName: 'User', role: 'OFFICE' as const, credentials: null },
+  ]
 
-  await prisma.provider.upsert({
-    where: { email: 'provider@qwcwoundcare.com' },
-    update: {},
-    create: {
-      firstName: 'Provider',
-      lastName: 'Admin',
-      credentials: 'DPM',
-      email: 'provider@qwcwoundcare.com',
-      accounts: {
-        create: {
-          type: 'credentials',
-          providerAccountId: 'provider@qwcwoundcare.com',
-          access_token: hashedPassword, // storing hashed password here for credentials auth
-        },
+  for (const u of seedUsers) {
+    const password = await bcrypt.hash(u.password, 12)
+    await prisma.user.upsert({
+      where: { username: u.username },
+      update: {},
+      create: {
+        username: u.username,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        credentials: u.credentials,
+        role: u.role,
+        password,
       },
-    },
-  })
-  console.log('✓ Provider seeded')
+    })
+  }
+  console.log(`✓ ${seedUsers.length} users seeded (admin/provider/office)`)
 
   // ─────────────────────────────────────────────────────────────────────────
   // CAREFLOW RULES

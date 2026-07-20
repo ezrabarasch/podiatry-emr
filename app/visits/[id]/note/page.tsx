@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useSession, signOut } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
+import Nav from '@/app/components/Nav'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -44,6 +45,7 @@ export default function NotePage() {
   const router = useRouter()
   const params = useParams()
   const visitId = params.id as string
+  const readOnly = session?.user?.role === 'OFFICE'
 
   const [visit, setVisit] = useState<VisitInfo | null>(null)
   const [note, setNote] = useState<GeneratedNote | null>(null)
@@ -167,35 +169,24 @@ export default function NotePage() {
     )
   }
 
-  const user = session?.user as { name?: string; credentials?: string } | undefined
   const alertCodes = new Set(note.billingAlerts.map(a => a.code))
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Sticky nav */}
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push(`/visits/${visitId}`)}
-            className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
-          >
-            ← Edit Form
-          </button>
-          <span className="text-slate-300">|</span>
-          <h1 className="text-lg font-semibold text-slate-800">QWC Podiatry</h1>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-600">
-            {user?.name}{user?.credentials && `, ${user.credentials}`}
-          </span>
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
-          >
-            Sign out
-          </button>
-        </div>
-      </nav>
+      <Nav
+        left={
+          <>
+            <button
+              onClick={() => router.push(`/visits/${visitId}`)}
+              className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
+            >
+              ← {readOnly ? 'Visit Form' : 'Edit Form'}
+            </button>
+            <span className="text-slate-300">|</span>
+            <h1 className="text-lg font-semibold text-slate-800">QWC Podiatry</h1>
+          </>
+        }
+      />
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Visit header */}
@@ -296,7 +287,7 @@ export default function NotePage() {
                 <h3 className="text-sm font-semibold text-slate-700">Addendum</h3>
               </div>
               <div className="p-5">
-                {note.isSigned ? (
+                {note.isSigned || readOnly ? (
                   addendum ? (
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{addendum}</p>
                   ) : (
@@ -412,7 +403,7 @@ export default function NotePage() {
             </div>
 
             {/* Sign & Lock */}
-            {note.isSigned ? (
+            {readOnly && !note.isSigned ? null : note.isSigned ? (
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
                 <p className="text-sm font-semibold text-green-800">Note Signed &amp; Locked</p>
                 {visit.signedAt && (

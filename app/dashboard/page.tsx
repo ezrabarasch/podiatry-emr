@@ -1,8 +1,8 @@
 'use client'
 
-import { useSession, signOut } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Nav from '@/app/components/Nav'
 
 interface Facility {
   id: string
@@ -20,7 +20,6 @@ interface Patient {
 }
 
 export default function DashboardPage() {
-  const { data: session } = useSession()
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
@@ -52,21 +51,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Nav */}
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-800">QWC Podiatry</h1>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-600">
-            {session?.user?.name}{session?.user?.credentials && `, ${session.user.credentials}`}
-          </span>
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
-          >
-            Sign out
-          </button>
-        </div>
-      </nav>
+      <Nav />
 
       <main className="max-w-5xl mx-auto px-6 py-10">
         {/* Header */}

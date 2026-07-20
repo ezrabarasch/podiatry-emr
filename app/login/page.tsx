@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -16,7 +16,7 @@ export default function LoginPage() {
     setLoading(true)
 
     const result = await signIn('credentials', {
-      email,
+      username,
       password,
       redirect: false,
     })
@@ -24,7 +24,8 @@ export default function LoginPage() {
     setLoading(false)
 
     if (result?.error) {
-      setError('Invalid email or password.')
+      // authorize() surfaces specific messages (e.g. "Account is locked") via error
+      setError(result.error === 'CredentialsSignin' ? 'Invalid username or password.' : result.error)
     } else {
       router.push('/dashboard')
     }
@@ -46,16 +47,16 @@ export default function LoginPage() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              Email
+              Username
             </label>
             <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
               className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="you@qwcwoundcare.com"
-              autoComplete="email"
+              placeholder="username"
+              autoComplete="username"
             />
           </div>
 
@@ -82,7 +83,7 @@ export default function LoginPage() {
 
           <button
             onClick={handleLogin}
-            disabled={loading || !email || !password}
+            disabled={loading || !username || !password}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
           >
             {loading ? 'Signing in...' : 'Sign in'}

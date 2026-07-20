@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getSessionUser, requireRole } from '@/lib/auth'
 
 export async function GET(
   _req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { id } = await context.params
 
   const visit = await prisma.visit.findUnique({
@@ -25,6 +28,9 @@ export async function DELETE(
   _req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const { error } = await requireRole(['PROVIDER', 'ADMIN'])
+  if (error) return error
+
   const { id } = await context.params
 
   const visit = await prisma.visit.findUnique({ where: { id } })

@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useSession, signOut } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
+import Nav from '@/app/components/Nav'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -296,12 +297,14 @@ function FieldRow({
   selections,
   onRadio,
   onCheckbox,
+  readOnly,
 }: {
   field: FieldDef
   sectionId: string
   selections: Selections
   onRadio: (sectionId: string, key: string, value: string | null) => void
   onCheckbox: (sectionId: string, key: string, checkValue: string, checked: boolean) => void
+  readOnly: boolean
 }) {
   if (field.type === 'radio') {
     const current = selections[sectionId]?.[field.key]
@@ -315,12 +318,13 @@ function FieldRow({
             <button
               key={opt.value}
               type="button"
+              disabled={readOnly}
               onClick={() => onRadio(sectionId, field.key, current === opt.value ? null : opt.value)}
               className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors ${
                 current === opt.value
                   ? 'bg-blue-600 border-blue-600 text-white'
                   : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600'
-              }`}
+              } ${readOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               {opt.label}
             </button>
@@ -339,8 +343,9 @@ function FieldRow({
       <input
         type="checkbox"
         checked={checked}
+        disabled={readOnly}
         onChange={e => onCheckbox(sectionId, field.key, field.checkValue, e.target.checked)}
-        className="h-4 w-4 rounded border-slate-300 accent-blue-600 cursor-pointer"
+        className={`h-4 w-4 rounded border-slate-300 accent-blue-600 ${readOnly ? 'cursor-not-allowed' : 'cursor-pointer'}`}
       />
     </div>
   )
@@ -351,11 +356,13 @@ function SectionCard({
   selections,
   onRadio,
   onCheckbox,
+  readOnly,
 }: {
   section: SectionDef
   selections: Selections
   onRadio: (sectionId: string, key: string, value: string | null) => void
   onCheckbox: (sectionId: string, key: string, checkValue: string, checked: boolean) => void
+  readOnly: boolean
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-4">
@@ -383,12 +390,13 @@ function SectionCard({
                     const cbf = f as CheckboxField
                     const checked = selections[section.id]?.[cbf.key] === cbf.checkValue
                     return (
-                      <label key={cbf.key} className="flex items-center gap-2 cursor-pointer">
+                      <label key={cbf.key} className={`flex items-center gap-2 ${readOnly ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                         <input
                           type="checkbox"
                           checked={checked}
+                          disabled={readOnly}
                           onChange={e => onCheckbox(section.id, cbf.key, cbf.checkValue, e.target.checked)}
-                          className="h-4 w-4 rounded border-slate-300 accent-blue-600 cursor-pointer"
+                          className={`h-4 w-4 rounded border-slate-300 accent-blue-600 ${readOnly ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                         />
                         <span className="text-sm text-slate-700">{cbf.label}</span>
                       </label>
@@ -405,6 +413,7 @@ function SectionCard({
                       selections={selections}
                       onRadio={onRadio}
                       onCheckbox={onCheckbox}
+                      readOnly={readOnly}
                     />
                   ))}
                 </div>
@@ -426,6 +435,7 @@ export default function VisitPage() {
   const router = useRouter()
   const params = useParams()
   const visitId = params.id as string
+  const readOnly = session?.user?.role === 'OFFICE'
 
   const [visit, setVisit] = useState<VisitData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -526,51 +536,49 @@ export default function VisitPage() {
     )
   }
 
-  const user = session?.user as { id?: string; name?: string; credentials?: string } | undefined
-
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Sticky nav */}
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push(`/patients/${visit.patient.id}`)}
-            className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
-          >
-            ← {visit.patient.lastName}, {visit.patient.firstName}
-          </button>
-          <span className="text-slate-300">|</span>
-          <h1 className="text-lg font-semibold text-slate-800">QWC Podiatry</h1>
-        </div>
-        <div className="flex items-center gap-4">
-          {saveStatus === 'saving' && (
-            <span className="text-xs text-slate-400">Saving...</span>
-          )}
-          {saveStatus === 'saved' && (
-            <span className="text-xs text-green-600 font-medium">Saved ✓</span>
-          )}
-          {saveStatus === 'error' && (
-            <span className="text-xs text-red-500">Save failed</span>
-          )}
-          <button
-            onClick={() => router.push(`/visits/${visitId}/note`)}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            Generate Note →
-          </button>
-          <span className="text-sm text-slate-600">
-            {user?.name}{user?.credentials && `, ${user.credentials}`}
-          </span>
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
-          >
-            Sign out
-          </button>
-        </div>
-      </nav>
+      <Nav
+        left={
+          <>
+            <button
+              onClick={() => router.push(`/patients/${visit.patient.id}`)}
+              className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
+            >
+              ← {visit.patient.lastName}, {visit.patient.firstName}
+            </button>
+            <span className="text-slate-300">|</span>
+            <h1 className="text-lg font-semibold text-slate-800">QWC Podiatry</h1>
+          </>
+        }
+        right={
+          <>
+            {!readOnly && saveStatus === 'saving' && (
+              <span className="text-xs text-slate-400">Saving...</span>
+            )}
+            {!readOnly && saveStatus === 'saved' && (
+              <span className="text-xs text-green-600 font-medium">Saved ✓</span>
+            )}
+            {!readOnly && saveStatus === 'error' && (
+              <span className="text-xs text-red-500">Save failed</span>
+            )}
+            <button
+              onClick={() => router.push(`/visits/${visitId}/note`)}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              {readOnly ? 'View Note →' : 'Generate Note →'}
+            </button>
+          </>
+        }
+      />
 
       <main className="max-w-4xl mx-auto px-6 py-8">
+        {readOnly && (
+          <div className="bg-amber-50 border border-amber-300 text-amber-800 text-sm rounded-lg px-4 py-3 mb-6">
+            Read-only view — you do not have permission to edit visits.
+          </div>
+        )}
+
         {/* Visit header */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
           <div className="flex items-start justify-between">
@@ -621,22 +629,27 @@ export default function VisitPage() {
             selections={selections}
             onRadio={handleRadio}
             onCheckbox={handleCheckbox}
+            readOnly={readOnly}
           />
         ))}
 
         {/* Bottom CTA */}
         <div className="flex items-center justify-between pt-2 pb-16">
-          <button
-            onClick={() => setShowCancelDialog(true)}
-            className="text-sm font-medium text-red-600 hover:text-red-800 border border-red-300 hover:border-red-400 px-4 py-2.5 rounded-lg transition-colors"
-          >
-            Cancel Visit
-          </button>
+          {readOnly ? (
+            <span />
+          ) : (
+            <button
+              onClick={() => setShowCancelDialog(true)}
+              className="text-sm font-medium text-red-600 hover:text-red-800 border border-red-300 hover:border-red-400 px-4 py-2.5 rounded-lg transition-colors"
+            >
+              Cancel Visit
+            </button>
+          )}
           <button
             onClick={() => router.push(`/visits/${visitId}/note`)}
             className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors"
           >
-            Generate Note →
+            {readOnly ? 'View Note →' : 'Generate Note →'}
           </button>
         </div>
       </main>

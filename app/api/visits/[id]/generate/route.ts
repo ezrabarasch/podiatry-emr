@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getSessionUser } from '@/lib/auth'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lookup tables for codes used in the at_risk_podiatry careflow
@@ -61,6 +62,8 @@ export async function GET(
   _req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { id: visitId } = await context.params
 
   const visit = await prisma.visit.findUnique({

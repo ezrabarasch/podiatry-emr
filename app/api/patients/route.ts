@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getSessionUser, requireRole } from '@/lib/auth'
 
 export async function GET() {
+  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const patients = await prisma.patient.findMany({
     where: { active: true },
     include: { facility: true },
@@ -12,6 +15,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const { error } = await requireRole(['PROVIDER', 'ADMIN'])
+  if (error) return error
+
   const body = await req.json()
   const { firstName, lastName, dob, facilityId, pccPatientId } = body
 

@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSession, signOut } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
+import Nav from '@/app/components/Nav'
 
 interface Facility {
   id: string
@@ -63,13 +64,11 @@ export default function PatientPage() {
     return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25))
   }
 
+  const canEdit = session?.user?.role === 'PROVIDER' || session?.user?.role === 'ADMIN'
+
   const handleNewVisit = async () => {
     setCreating(true)
-    const res = await fetch(`/api/patients/${patientId}/visits`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ providerId: session?.user?.id }),
-    })
+    const res = await fetch(`/api/patients/${patientId}/visits`, { method: 'POST' })
     const visit = await res.json()
     router.push(`/visits/${visit.id}`)
   }
@@ -92,9 +91,8 @@ export default function PatientPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Nav */}
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <Nav left={
+        <>
           <button
             onClick={() => router.push('/dashboard')}
             className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
@@ -103,19 +101,8 @@ export default function PatientPage() {
           </button>
           <span className="text-slate-300">|</span>
           <h1 className="text-lg font-semibold text-slate-800">QWC Podiatry</h1>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-600">
-            {session?.user?.name}{session?.user?.credentials && `, ${session.user.credentials}`}
-          </span>
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
-          >
-            Sign out
-          </button>
-        </div>
-      </nav>
+        </>
+      } />
 
       <main className="max-w-5xl mx-auto px-6 py-10">
         {/* Patient Header */}
@@ -139,13 +126,15 @@ export default function PatientPage() {
                 </span>
               </div>
             </div>
-            <button
-              onClick={handleNewVisit}
-              disabled={creating}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
-            >
-              {creating ? 'Creating...' : '+ New Visit'}
-            </button>
+            {canEdit && (
+              <button
+                onClick={handleNewVisit}
+                disabled={creating}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+              >
+                {creating ? 'Creating...' : '+ New Visit'}
+              </button>
+            )}
           </div>
         </div>
 
