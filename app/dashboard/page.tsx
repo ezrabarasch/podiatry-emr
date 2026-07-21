@@ -100,10 +100,10 @@ export default function DashboardPage() {
   ]
 
   return (
-    <PageShell>
+    <PageShell breadcrumb={[{ label: 'Patients' }]}>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-semibold text-text">Patients</h2>
+          <h2 className="text-xl font-bold text-text">Patients</h2>
           <p className="text-sm text-text-muted mt-0.5">Select a patient to begin or continue a visit</p>
         </div>
         {isAdmin && (
@@ -118,7 +118,7 @@ export default function DashboardPage() {
           placeholder="Search by name or MRN..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="flex-1 min-w-[220px] max-w-sm px-3 py-2 rounded-lg border border-border text-sm text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+          className="flex-1 min-w-[220px] max-w-[320px] px-3 py-2 rounded-lg border border-border text-sm text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
         />
         <select
           value={facilityId}

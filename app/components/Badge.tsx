@@ -2,16 +2,19 @@ type Variant =
   | 'snf' | 'alf'
   | 'draft' | 'signed'
   | 'active' | 'locked' | 'inactive'
+  | 'medicare' | 'medicaid'
   | 'provider' | 'office' | 'admin'
 
 const STYLES: Record<Variant, string> = {
-  snf: 'bg-blue-100 text-blue-700',
-  alf: 'bg-purple-100 text-purple-700',
-  draft: 'bg-yellow-100 text-yellow-700',
-  signed: 'bg-green-100 text-green-700',
-  active: 'bg-green-100 text-green-700',
+  snf: 'bg-[#DBEAFE] text-[#1D4ED8]',
+  alf: 'bg-[#EDE9FE] text-[#6D28D9]',
+  draft: 'bg-[#FEF9C3] text-[#854D0E]',
+  signed: 'bg-[#DCFCE7] text-[#15803D]',
+  active: 'bg-[#DCFCE7] text-[#15803D]',
   locked: 'bg-red-100 text-red-700',
-  inactive: 'bg-slate-100 text-slate-600',
+  inactive: 'bg-[#F1F5F9] text-[#64748B]',
+  medicare: 'bg-[#DBEAFE] text-[#1D4ED8]',
+  medicaid: 'bg-[#FCE7F3] text-[#9D174D]',
   provider: 'bg-blue-100 text-blue-700',
   office: 'bg-slate-100 text-slate-600',
   admin: 'bg-indigo-100 text-indigo-700',

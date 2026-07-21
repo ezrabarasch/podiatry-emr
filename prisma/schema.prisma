@@ -116,6 +116,7 @@ model User {
 
   visits              Visit[]
   sessionLogs         SessionLog[]
+  patientUploads      PatientUpload[]
 
   @@map("users")
 }
@@ -166,8 +167,50 @@ model Patient {
   facility     Facility     @relation(fields: [facilityId], references: [id])
   visits       Visit[]
   coverages    PatientCoverage[]
+  diagnoses    PatientDiagnosis[]
+  uploads      PatientUpload[]
 
   @@map("patients")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATIENT DIAGNOSES — active problem list (synced from PCC)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PatientDiagnosis {
+  id          String   @id @default(uuid())
+  patientId   String
+  icd10Code   String
+  description String
+  active      Boolean  @default(true)
+  syncedAt    DateTime @default(now())
+
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("patient_diagnoses")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATIENT UPLOADS — documents attached to a patient, stored on local disk
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PatientUpload {
+  id            String   @id @default(uuid())
+  patientId     String
+  uploadedById  String
+  fileName      String   // original filename
+  fileLabel     String?  // user-given display name
+  mimeType      String
+  fileSizeBytes Int
+  storageKey    String   // path on disk relative to the uploads root
+  createdAt     DateTime @default(now())
+
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  uploadedBy    User     @relation(fields: [uploadedById], references: [id])
+
+  @@index([patientId])
+  @@map("patient_uploads")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

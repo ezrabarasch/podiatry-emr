@@ -9,6 +9,7 @@ import PageShell from '@/app/components/PageShell'
 const TABS = [
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/facilities', label: 'Facilities' },
+  { href: '/admin/billing', label: 'Billing' },
   { href: '/admin/sessions', label: 'Session Log' },
 ]
 

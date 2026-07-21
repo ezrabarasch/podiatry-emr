@@ -19,18 +19,18 @@ export default function Table<T extends { id?: string }>({
   empty?: string
 }) {
   return (
-    <div className="bg-surface rounded-xl border border-border overflow-hidden">
+    <div className="bg-surface rounded-lg border border-border overflow-hidden">
       {rows.length === 0 ? (
         <div className="p-8 text-center text-text-muted text-sm">{empty}</div>
       ) : (
         <table className="w-full">
           <thead>
-            <tr className="border-b border-border bg-slate-50">
+            <tr className="border-b border-border bg-[#F8FAFC]">
               {columns.map(c => (
                 <th
                   key={c.key}
                   style={c.width ? { width: c.width } : undefined}
-                  className="text-left px-5 py-3 text-xs font-medium text-text-muted uppercase tracking-wide"
+                  className="text-left px-5 py-3 text-[10px] font-semibold text-[#64748B] uppercase tracking-wide"
                 >
                   {c.label}
                 </th>
@@ -42,9 +42,9 @@ export default function Table<T extends { id?: string }>({
               <tr
                 key={row.id ?? i}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={`border-b border-slate-100 transition-colors ${
-                  onRowClick ? 'hover:bg-blue-50 cursor-pointer' : ''
-                } ${i % 2 === 0 ? '' : 'bg-slate-50/50'}`}
+                className={`border-b border-[#F1F5F9] transition-colors ${
+                  onRowClick ? 'hover:bg-[#F8FBFF] cursor-pointer' : ''
+                }`}
               >
                 {columns.map(c => (
                   <td key={c.key} className="px-5 py-4 text-sm text-text">

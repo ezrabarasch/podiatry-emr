@@ -15,6 +15,7 @@ export async function GET(
     include: {
       facility: true,
       coverages: { where: { active: true }, orderBy: { isPrimary: 'desc' } },
+      diagnoses: { where: { active: true }, orderBy: { icd10Code: 'asc' } },
     },
   })
 
