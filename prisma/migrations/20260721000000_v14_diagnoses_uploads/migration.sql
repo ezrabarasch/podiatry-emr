@@ -1,11 +1,13 @@
--- v1.4 patient detail expansion: problem list + document uploads.
--- Hand-authored (local Postgres down). Applied via `prisma migrate deploy`.
+-- v1.4 patient problem list. Hand-authored. Applied via `prisma migrate deploy`.
+-- Idempotent: the patient_diagnoses table already exists in some environments
+-- (created out-of-band by the PCC sync), so guard against re-creation.
+-- patient_uploads lives in its own later migration (20260721010000_patient_uploads).
 
 -- CreateTable
-CREATE TABLE "patient_diagnoses" (
+CREATE TABLE IF NOT EXISTS "patient_diagnoses" (
     "id" TEXT NOT NULL,
     "patientId" TEXT NOT NULL,
-    "icd10Code" TEXT NOT NULL,
+    "icd10" TEXT NOT NULL,
     "description" TEXT NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "syncedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -13,32 +15,10 @@ CREATE TABLE "patient_diagnoses" (
     CONSTRAINT "patient_diagnoses_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "patient_uploads" (
-    "id" TEXT NOT NULL,
-    "patientId" TEXT NOT NULL,
-    "uploadedById" TEXT NOT NULL,
-    "fileName" TEXT NOT NULL,
-    "fileLabel" TEXT,
-    "mimeType" TEXT NOT NULL,
-    "fileSizeBytes" INTEGER NOT NULL,
-    "storageKey" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "patient_uploads_pkey" PRIMARY KEY ("id")
-);
-
 -- CreateIndex
-CREATE INDEX "patient_diagnoses_patientId_idx" ON "patient_diagnoses"("patientId");
+CREATE INDEX IF NOT EXISTS "patient_diagnoses_patientId_idx" ON "patient_diagnoses"("patientId");
 
--- CreateIndex
-CREATE INDEX "patient_uploads_patientId_idx" ON "patient_uploads"("patientId");
-
--- AddForeignKey
-ALTER TABLE "patient_diagnoses" ADD CONSTRAINT "patient_diagnoses_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "patients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "patient_uploads" ADD CONSTRAINT "patient_uploads_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "patients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "patient_uploads" ADD CONSTRAINT "patient_uploads_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- AddForeignKey (guarded — constraint may already exist on a pre-created table)
+DO $$ BEGIN
+    ALTER TABLE "patient_diagnoses" ADD CONSTRAINT "patient_diagnoses_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "patients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

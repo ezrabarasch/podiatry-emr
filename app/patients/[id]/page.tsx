@@ -22,7 +22,7 @@ interface Coverage {
 
 interface Diagnosis {
   id: string
-  icd10Code: string
+  icd10: string
   description: string
   syncedAt: string
 }
@@ -255,7 +255,7 @@ export default function PatientPage() {
             <ul>
               {patient.diagnoses.map(d => (
                 <li key={d.id} className="flex items-center gap-4 px-5 py-3 border-b border-[#F1F5F9] last:border-0">
-                  <span className="font-mono text-xs font-semibold px-2 py-1 rounded bg-[#DBEAFE] text-[#1D4ED8]">{d.icd10Code}</span>
+                  <span className="font-mono text-xs font-semibold px-2 py-1 rounded bg-[#DBEAFE] text-[#1D4ED8]">{d.icd10}</span>
                   <span className="flex-1 text-sm text-text">{d.description}</span>
                   <span className="text-xs text-text-muted">PCC · Active</span>
                 </li>

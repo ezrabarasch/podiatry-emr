@@ -180,7 +180,7 @@ model Patient {
 model PatientDiagnosis {
   id          String   @id @default(uuid())
   patientId   String
-  icd10Code   String
+  icd10       String
   description String
   active      Boolean  @default(true)
   syncedAt    DateTime @default(now())
