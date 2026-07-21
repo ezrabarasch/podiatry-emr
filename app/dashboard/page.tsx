@@ -5,7 +5,6 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import PageShell from '@/app/components/PageShell'
 import Table, { type Column } from '@/app/components/Table'
-import Badge from '@/app/components/Badge'
 import Button from '@/app/components/Button'
 
 interface Facility {
@@ -25,7 +24,12 @@ interface Patient {
   roomNumber: string | null
   admissionDate: string | null
   active: boolean
+  coverages: { payerType: string }[]
   _count: { visits: number }
+}
+
+const PAYER_LABELS: Record<string, string> = {
+  MEDICARE: 'Medicare', MEDICAID: 'Medicaid', COMMERCIAL: 'Commercial', OTHER: 'Other',
 }
 
 const fmtDate = (d: string | null) =>
@@ -42,13 +46,15 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [facilityId, setFacilityId] = useState('')
+  const [payerType, setPayerType] = useState('')
   const [showInactive, setShowInactive] = useState(false)
 
   const isAdmin = session?.user?.role === 'ADMIN'
 
   useEffect(() => {
+    // Load active + inactive once; visibility is handled client-side below.
     Promise.all([
-      fetch('/api/patients').then(r => r.json()),
+      fetch('/api/patients?includeInactive=true').then(r => r.json()),
       fetch('/api/facilities').then(r => r.json()),
     ]).then(([pats, facs]) => {
       setPatients(Array.isArray(pats) ? pats : [])
@@ -57,11 +63,20 @@ export default function DashboardPage() {
     })
   }, [])
 
+  // Distinct payer types present in the loaded data (empty until coverage syncs).
+  const payerOptions = useMemo(
+    () => [...new Set(patients.flatMap(p => p.coverages.map(c => c.payerType)))].sort(),
+    [patients]
+  )
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
+    // Searching reveals inactive patients even when the toggle is off.
+    const includeInactive = showInactive || q.length > 0
     return patients.filter(p => {
-      if (!showInactive && !p.active) return false
+      if (!includeInactive && !p.active) return false
       if (facilityId && p.facility.id !== facilityId) return false
+      if (payerType && !p.coverages.some(c => c.payerType === payerType)) return false
       if (!q) return true
       return (
         `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
@@ -69,7 +84,7 @@ export default function DashboardPage() {
         (p.pccPatientId ?? '').toLowerCase().includes(q)
       )
     })
-  }, [patients, search, facilityId, showInactive])
+  }, [patients, search, facilityId, payerType, showInactive])
 
   const columns: Column<Patient>[] = [
     { key: 'name', label: 'Patient', render: p => (
@@ -82,7 +97,6 @@ export default function DashboardPage() {
     { key: 'room', label: 'Room', render: p => <span className="text-text-muted">{p.roomNumber ?? '—'}</span> },
     { key: 'admission', label: 'Admitted', render: p => <span className="text-text-muted">{fmtDate(p.admissionDate)}</span> },
     { key: 'visits', label: 'Visits', render: p => <span className="text-text-muted">{p._count.visits}</span> },
-    { key: 'type', label: 'Type', render: p => <Badge variant={p.facilityType === 'SNF' ? 'snf' : 'alf'} label={p.facilityType} /> },
   ]
 
   return (
@@ -113,6 +127,14 @@ export default function DashboardPage() {
         >
           <option value="">All facilities</option>
           {facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+        </select>
+        <select
+          value={payerType}
+          onChange={e => setPayerType(e.target.value)}
+          className="px-3 py-2 rounded-lg border border-border text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+        >
+          <option value="">All payers</option>
+          {payerOptions.map(pt => <option key={pt} value={pt}>{PAYER_LABELS[pt] ?? pt}</option>)}
         </select>
         <label className="flex items-center gap-2 text-sm text-text-muted cursor-pointer">
           <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />

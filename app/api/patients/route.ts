@@ -2,12 +2,32 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser, requireRole } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(req: Request) {
   if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Return all patients (active + inactive); the dashboard filters client-side.
+  const { searchParams } = new URL(req.url)
+  const q = searchParams.get('q')?.trim() ?? ''
+  // A search spans active + inactive; the default list is active-only.
+  const includeInactive = searchParams.get('includeInactive') === 'true' || q.length > 0
+
   const patients = await prisma.patient.findMany({
-    include: { facility: true, _count: { select: { visits: true } } },
+    where: {
+      ...(includeInactive ? {} : { active: true }),
+      ...(q
+        ? {
+            OR: [
+              { firstName: { contains: q, mode: 'insensitive' } },
+              { lastName: { contains: q, mode: 'insensitive' } },
+              { pccPatientId: { contains: q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
+    include: {
+      facility: true,
+      coverages: { select: { payerType: true } },
+      _count: { select: { visits: true } },
+    },
     orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
   })
 

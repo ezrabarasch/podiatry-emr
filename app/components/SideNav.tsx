@@ -30,10 +30,9 @@ export default function SideNav() {
   const pathname = usePathname()
   const user = session?.user
 
-  // ponytail: Visits → dashboard; no standalone visit-index page in scope.
   const items = [
     { label: 'Patients', icon: 'users', href: '/dashboard', match: (p: string) => p === '/dashboard' || p.startsWith('/patients') },
-    { label: 'Visits', icon: 'clipboard', href: '/dashboard', match: (p: string) => p.startsWith('/visits') },
+    { label: 'Visits', icon: 'clipboard', href: '/visits', match: (p: string) => p.startsWith('/visits') },
     ...(user?.role === 'ADMIN' ? [{ label: 'Admin', icon: 'settings', href: '/admin/users', match: (p: string) => p.startsWith('/admin') }] : []),
   ]
 

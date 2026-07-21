@@ -78,6 +78,12 @@ model Facility {
   npi           String?
   posCode       String?      // Place of Service code (e.g. "31" SNF, "13" ALF)
   pccFacilityId String?      // PCC's internal facility ID for linking
+  adminContactName  String?
+  adminContactPhone String?
+  adminContactEmail String?
+  donContactName    String?
+  donContactPhone   String?
+  donContactEmail   String?
   active        Boolean      @default(true)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
