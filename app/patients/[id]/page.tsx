@@ -41,6 +41,9 @@ interface Patient {
   medicareNumber: string | null
   medicaidNumber: string | null
   primaryLanguage: string | null
+  gender: string | null
+  maritalStatus: string | null
+  medicalRecordNumber: string | null
   active: boolean
   coverages: Coverage[]
   diagnoses: Diagnosis[]
@@ -272,10 +275,10 @@ export default function PatientPage() {
             <dl className="grid grid-cols-2 gap-4">
               <Detail label="Full Name" value={`${patient.firstName} ${patient.lastName}`} />
               <Detail label="Date of Birth" value={fmt(patient.dob)} />
-              <Detail label="Gender" value="—" />
-              <Detail label="Marital Status" value="—" />
+              <Detail label="Gender" value={patient.gender} />
+              <Detail label="Marital Status" value={patient.maritalStatus} />
               <Detail label="Language" value={patient.primaryLanguage} />
-              <Detail label="MRN" value={patient.pccPatientId} />
+              <Detail label="MRN" value={patient.medicalRecordNumber ?? patient.pccPatientId} />
             </dl>
           </Card>
           <Card>

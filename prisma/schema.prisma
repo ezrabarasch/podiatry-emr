@@ -159,6 +159,9 @@ model Patient {
   medicareNumber  String?
   medicaidNumber  String?
   primaryLanguage String?
+  gender          String?
+  maritalStatus   String?
+  medicalRecordNumber String?
   isDeceased      Boolean   @default(false)
   active       Boolean      @default(true)
   createdAt    DateTime     @default(now())
