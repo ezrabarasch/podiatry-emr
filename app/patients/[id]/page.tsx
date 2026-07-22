@@ -68,6 +68,34 @@ interface Upload {
   uploadedBy: { firstName: string; lastName: string }
 }
 
+interface Medication {
+  id: string
+  description: string
+  status: string | null
+  strength: string | null
+  strengthUOM: string | null
+  directions: string | null
+  startDate: string | null
+  endDate: string | null
+}
+
+interface Allergy {
+  id: string
+  allergen: string
+  severity: string | null
+}
+
+interface Contact {
+  id: string
+  firstName: string | null
+  lastName: string | null
+  relationship: string | null
+  contactType: string | null
+  homePhone: string | null
+  cellPhone: string | null
+  officePhone: string | null
+}
+
 const fmt = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 const calcAge = (dob: string) =>
@@ -97,6 +125,9 @@ export default function PatientPage() {
   const [patient, setPatient] = useState<Patient | null>(null)
   const [visits, setVisits] = useState<Visit[]>([])
   const [uploads, setUploads] = useState<Upload[]>([])
+  const [medications, setMedications] = useState<Medication[]>([])
+  const [allergies, setAllergies] = useState<Allergy[]>([])
+  const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [tab, setTab] = useState<Tab>('Visits')
@@ -106,14 +137,21 @@ export default function PatientPage() {
     fetch(`/api/patients/${patientId}/uploads`).then(r => r.json()).then(u => setUploads(Array.isArray(u) ? u : []))
 
   useEffect(() => {
+    const json = (path: string) => fetch(`/api/patients/${patientId}${path}`).then(r => r.json())
     Promise.all([
-      fetch(`/api/patients/${patientId}`).then(r => r.json()),
-      fetch(`/api/patients/${patientId}/visits`).then(r => r.json()),
-      fetch(`/api/patients/${patientId}/uploads`).then(r => r.json()),
-    ]).then(([p, v, u]) => {
+      json(''),
+      json('/visits'),
+      json('/uploads'),
+      json('/medications'),
+      json('/allergies'),
+      json('/contacts'),
+    ]).then(([p, v, u, m, a, c]) => {
       setPatient(p)
       setVisits(Array.isArray(v) ? v : [])
       setUploads(Array.isArray(u) ? u : [])
+      setMedications(Array.isArray(m) ? m : [])
+      setAllergies(Array.isArray(a) ? a : [])
+      setContacts(Array.isArray(c) ? c : [])
       setLoading(false)
     })
   }, [patientId])
@@ -150,6 +188,10 @@ export default function PatientPage() {
   const lastVisit = visits[0]
   const syncedDate = patient.diagnoses[0] ? fmt(patient.diagnoses[0].syncedAt) : '—'
 
+  const ec = contacts.find(c => /emerg/i.test(c.contactType ?? '') || /emerg/i.test(c.relationship ?? '')) ?? contacts[0]
+  const ecName = ec ? [ec.firstName, ec.lastName].filter(Boolean).join(' ') : ''
+  const ecPhone = ec ? (ec.cellPhone ?? ec.homePhone ?? ec.officePhone ?? '') : ''
+
   const visitColumns: Column<Visit>[] = [
     { key: 'date', label: 'Date of Service', render: v => <span className="font-medium text-text">{fmt(v.visitDate)}</span> },
     { key: 'practice', label: 'Practice', render: () => <span className="text-text-muted">Q-Med Podiatry</span> },
@@ -163,6 +205,15 @@ export default function PatientPage() {
     ) },
     { key: 'status', label: 'Status', render: v => <Badge variant={v.status === 'signed' ? 'signed' : 'draft'} label={v.status === 'signed' ? 'Signed' : 'Draft'} /> },
     { key: 'action', label: '', render: v => <span className="text-primary font-medium">{v.status === 'signed' ? 'View →' : 'Continue →'}</span> },
+  ]
+
+  const medColumns: Column<Medication>[] = [
+    { key: 'name', label: 'Medication', render: m => <span className="font-medium text-text">{m.description}</span> },
+    { key: 'strength', label: 'Strength', render: m => <span className="text-text-muted">{[m.strength, m.strengthUOM].filter(Boolean).join(' ') || '—'}</span> },
+    { key: 'directions', label: 'Directions', render: m => <span className="text-text-muted">{m.directions ?? '—'}</span> },
+    { key: 'status', label: 'Status', render: m => <span className="text-text-muted capitalize">{m.status ?? '—'}</span> },
+    { key: 'start', label: 'Start', render: m => <span className="text-text-muted">{fmt(m.startDate)}</span> },
+    { key: 'end', label: 'End', render: m => <span className="text-text-muted">{fmt(m.endDate)}</span> },
   ]
 
   return (
@@ -219,8 +270,17 @@ export default function PatientPage() {
 
         <Card padding="p-4">
           <p className="text-xs font-medium text-text-muted uppercase tracking-wide">Allergies</p>
-          {/* ponytail: allergy data not in schema yet; red-tag rendering ready for ETL, no fabricated allergens shown */}
-          <p className="text-sm text-text-muted mt-2">None on file</p>
+          {allergies.length === 0 ? (
+            <p className="text-sm text-text-muted mt-2">None on file</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {allergies.map(a => (
+                <span key={a.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-danger border border-red-200">
+                  ⚠ {a.allergen}{a.severity ? ` · ${a.severity}` : ''}
+                </span>
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card padding="p-4">
@@ -288,8 +348,8 @@ export default function PatientPage() {
               <Detail label="City / State" value="—" />
               <Detail label="Phone" value="—" />
               <Detail label="Email" value="—" />
-              <Detail label="Emergency Contact" value="—" />
-              <Detail label="EC Phone" value="—" />
+              <Detail label="Emergency Contact" value={ec ? `${ecName}${ec.relationship ? ` (${ec.relationship})` : ''}` : '—'} />
+              <Detail label="EC Phone" value={ecPhone} />
             </dl>
           </Card>
           <Card>
@@ -341,13 +401,17 @@ export default function PatientPage() {
       )}
 
       {tab === 'Medications' && (
-        <Card>
-          <div className="py-16 text-center">
-            <div className="text-4xl mb-3">💊</div>
-            <h3 className="text-lg font-semibold text-text">Medications coming soon</h3>
-            <p className="text-sm text-text-muted mt-1 max-w-md mx-auto">Medication data will appear here once the PCC ETL pipeline is expanded to include medication records.</p>
-          </div>
-        </Card>
+        medications.length === 0 ? (
+          <Card>
+            <div className="py-16 text-center">
+              <div className="text-4xl mb-3">💊</div>
+              <h3 className="text-lg font-semibold text-text">Medications coming soon</h3>
+              <p className="text-sm text-text-muted mt-1 max-w-md mx-auto">Medication data will appear here once the PCC ETL pipeline is expanded to include medication records.</p>
+            </div>
+          </Card>
+        ) : (
+          <Table columns={medColumns} rows={medications} empty="No medications on file." />
+        )
       )}
 
       {tab === 'Uploads' && (

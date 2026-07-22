@@ -172,6 +172,18 @@ model Patient {
   coverages    PatientCoverage[]
   diagnoses    PatientDiagnosis[]
   uploads      PatientUpload[]
+  medications       PatientMedication[]
+  allergies         PatientAllergy[]
+  observations      PatientObservation[]
+  contacts          PatientContact[]
+  adtRecords        PatientAdtRecord[]
+  practitioners     PatientPractitioner[]
+  immunizations     PatientImmunization[]
+  diagnosticReports PatientDiagnosticReport[]
+  carePlans         PatientCarePlan[]
+  assessments       PatientAssessment[]
+  episodesOfCare    PatientEpisodeOfCare[]
+  therapyTracks     PatientTherapyTrack[]
 
   @@map("patients")
 }
@@ -407,4 +419,251 @@ model CptQualifierRule {
   updatedAt        DateTime @updatedAt
 
   @@map("cpt_qualifier_rules")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PCC ETL EXPANSION — additional PCC resources synced per patient (v1.4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PatientMedication {
+  id          String    @id @default(uuid())
+  patientId   String
+  pccOrderId  String?
+  description String
+  status      String?
+  startDate   DateTime?
+  endDate     DateTime?
+  directions  String?
+  strength    String?
+  strengthUOM String?
+  rxNormId    String?
+  generic     Boolean   @default(false)
+  narcotic    Boolean   @default(false)
+  orderDate   DateTime?
+  syncedAt    DateTime  @default(now())
+
+  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, pccOrderId])
+  @@map("patient_medications")
+}
+
+model PatientAllergy {
+  id             String    @id @default(uuid())
+  patientId      String
+  pccAllergyId   String?
+  allergen       String
+  allergenCode   String?
+  category       String?
+  type           String?
+  severity       String?
+  reaction       String?
+  reactionNote   String?
+  clinicalStatus String?
+  onsetDate      DateTime?
+  resolvedDate   DateTime?
+  syncedAt       DateTime  @default(now())
+
+  patient        Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, allergen])
+  @@map("patient_allergies")
+}
+
+model PatientObservation {
+  id               String    @id @default(uuid())
+  patientId        String
+  pccObservationId String?
+  type             String    // BP, WEIGHT, TEMP, O2_SAT, HEART_RATE, BLOOD_SUGAR, PAIN, RESPIRATIONS, HEIGHT
+  value            Float?
+  diastolicValue   Float?
+  systolicValue    Float?
+  unit             String?
+  method           String?
+  recordedDate     DateTime
+  recordedBy       String?
+  syncedAt         DateTime  @default(now())
+
+  patient          Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("patient_observations")
+}
+
+model PatientContact {
+  id           String   @id @default(uuid())
+  patientId    String
+  pccContactId String?
+  firstName    String?
+  lastName     String?
+  relationship String?
+  contactType  String?
+  homePhone    String?
+  cellPhone    String?
+  officePhone  String?
+  email        String?
+  addressLine1 String?
+  city         String?
+  state        String?
+  postalCode   String?
+  isGuarantor  Boolean  @default(false)
+  syncedAt     DateTime @default(now())
+
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, pccContactId])
+  @@map("patient_contacts")
+}
+
+model PatientAdtRecord {
+  id                String    @id @default(uuid())
+  patientId         String
+  pccAdtRecordId    String?
+  actionCode        String?
+  actionType        String?
+  effectiveDateTime DateTime?
+  roomDesc          String?
+  bedDesc           String?
+  unitDesc          String?
+  floorDesc         String?
+  payerName         String?
+  payerType         String?
+  transferReason    String?
+  dischargeStatus   String?
+  syncedAt          DateTime  @default(now())
+
+  patient           Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, pccAdtRecordId])
+  @@map("patient_adt_records")
+}
+
+model PatientPractitioner {
+  id                String   @id @default(uuid())
+  patientId         String
+  pccPractitionerId String?
+  firstName         String?
+  lastName          String?
+  npi               String?
+  providerType      String?
+  relation          String?
+  title             String?
+  taxonomyCode      String?
+  syncedAt          DateTime @default(now())
+
+  patient           Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, pccPractitionerId])
+  @@map("patient_practitioners")
+}
+
+model PatientImmunization {
+  id                     String    @id @default(uuid())
+  patientId              String
+  pccImmunizationId      String?
+  immunization           String?
+  cvxCode                String?
+  administrationDateTime DateTime?
+  administeredBy         String?
+  lotNumber              String?
+  manufacturerName       String?
+  consentStatus          String?
+  given                  Boolean   @default(false)
+  syncedAt               DateTime  @default(now())
+
+  patient                Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, pccImmunizationId])
+  @@map("patient_immunizations")
+}
+
+model PatientDiagnosticReport {
+  id                   String    @id @default(uuid())
+  patientId            String
+  pccReportId          String?
+  reportName           String?
+  reportType           String?
+  reportStatus         String?
+  category             String?
+  effectiveDateTime    DateTime?
+  orderingPractitioner String?
+  syncedAt             DateTime  @default(now())
+
+  patient              Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, pccReportId])
+  @@map("patient_diagnostic_reports")
+}
+
+model PatientCarePlan {
+  id             String    @id @default(uuid())
+  patientId      String
+  pccCarePlanId  String?
+  status         String?
+  createdDate    DateTime?
+  nextReviewDate DateTime?
+  closedDate     DateTime?
+  closureReason  String?
+  syncedAt       DateTime  @default(now())
+
+  patient        Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, pccCarePlanId])
+  @@map("patient_care_plans")
+}
+
+model PatientAssessment {
+  id                String    @id @default(uuid())
+  patientId         String
+  pccAssessmentId   String?
+  assessmentRefDate DateTime?
+  assessmentScore   Float?
+  assessmentStatus  String?
+  templateId        String?
+  syncedAt          DateTime  @default(now())
+
+  patient           Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, pccAssessmentId])
+  @@map("patient_assessments")
+}
+
+model PatientEpisodeOfCare {
+  id           String    @id @default(uuid())
+  patientId    String
+  pccEpisodeId String?
+  name         String?
+  type         String?
+  status       String?
+  startDate    DateTime?
+  endDate      DateTime?
+  payerName    String?
+  payerType    String?
+  model        String?
+  syncedAt     DateTime  @default(now())
+
+  patient      Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, pccEpisodeId])
+  @@map("patient_episodes_of_care")
+}
+
+model PatientTherapyTrack {
+  id                     String    @id @default(uuid())
+  patientId              String
+  discipline             String?
+  onsetDate              DateTime?
+  startOfCareDate        DateTime?
+  certificationStartDate DateTime?
+  certificationEndDate   DateTime?
+  medicalDiagnosis       String?
+  treatmentDiagnosis     String?
+  treatmentFreqPerWeek   String?
+  therapyProvider        String?
+  syncedAt               DateTime  @default(now())
+
+  patient                Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("patient_therapy_tracks")
 }
