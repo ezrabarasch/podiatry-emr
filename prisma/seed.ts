@@ -1,5 +1,6 @@
 import { PrismaClient, CareflowType } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { PCC_RESOURCES, FREQUENCIES } from '../lib/integrations'
 
 const prisma = new PrismaClient()
 
@@ -365,6 +366,26 @@ async function main() {
     },
   })
   console.log('✓ Test facility + patient seeded')
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // INTEGRATION HUB — PCC source + 15 per-resource sync schedules
+  // ─────────────────────────────────────────────────────────────────────────
+  const pcc = await prisma.integrationSource.upsert({
+    where: { name: 'PCC' },
+    update: {},
+    create: { name: 'PCC', status: 'connected' },
+  })
+
+  for (const r of PCC_RESOURCES) {
+    const cronExpression = FREQUENCIES[r.frequency].cron
+    await prisma.integrationSyncConfig.upsert({
+      where: { sourceId_resourceName: { sourceId: pcc.id, resourceName: r.resource } },
+      update: { frequency: r.frequency, cronExpression },
+      create: { sourceId: pcc.id, resourceName: r.resource, frequency: r.frequency, cronExpression },
+    })
+  }
+  console.log(`✓ Integration Hub seeded (PCC + ${PCC_RESOURCES.length} resources)`)
+
   console.log('✅ Database seeding complete')
 }
 

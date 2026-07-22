@@ -667,3 +667,36 @@ model PatientTherapyTrack {
   @@index([patientId])
   @@map("patient_therapy_tracks")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTEGRATION HUB — external EMR sync sources + per-resource schedules
+// ─────────────────────────────────────────────────────────────────────────────
+
+model IntegrationSource {
+  id         String                  @id @default(uuid())
+  name       String                  @unique // PCC, MATRIX, MEDREX, SIGMA
+  status     String                  @default("disconnected")
+  lastSyncAt DateTime?
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+  configs    IntegrationSyncConfig[]
+
+  @@map("integration_sources")
+}
+
+model IntegrationSyncConfig {
+  id             String            @id @default(uuid())
+  sourceId       String
+  resourceName   String
+  enabled        Boolean           @default(true)
+  frequency      String            @default("DAILY_1AM") // EVERY_4H | EVERY_6H | DAILY_1AM | WEEKLY_MON_1AM
+  cronExpression String
+  lastSyncAt     DateTime?
+  lastCount      Int?
+  lastError      String?
+  updatedAt      DateTime          @updatedAt
+  source         IntegrationSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, resourceName])
+  @@map("integration_sync_configs")
+}

@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import PageShell from '@/app/components/PageShell'
 import Table, { type Column } from '@/app/components/Table'
 import Button from '@/app/components/Button'
+
+const PAGE_SIZE = 25
 
 interface Facility {
   id: string
@@ -42,6 +44,8 @@ export default function DashboardPage() {
   const { data: session } = useSession()
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [facilities, setFacilities] = useState<Facility[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -52,39 +56,37 @@ export default function DashboardPage() {
   const isAdmin = session?.user?.role === 'ADMIN'
 
   useEffect(() => {
-    // Load active + inactive once; visibility is handled client-side below.
-    Promise.all([
-      fetch('/api/patients?includeInactive=true').then(r => r.json()),
-      fetch('/api/facilities').then(r => r.json()),
-    ]).then(([pats, facs]) => {
-      setPatients(Array.isArray(pats) ? pats : [])
-      setFacilities(Array.isArray(facs) ? facs : [])
-      setLoading(false)
-    })
+    fetch('/api/facilities').then(r => r.json()).then(facs => setFacilities(Array.isArray(facs) ? facs : []))
   }, [])
 
-  // Distinct payer types present in the loaded data (empty until coverage syncs).
-  const payerOptions = useMemo(
-    () => [...new Set(patients.flatMap(p => p.coverages.map(c => c.payerType)))].sort(),
-    [patients]
-  )
+  // Fetch the current page whenever filters or the page change (debounced for typing).
+  useEffect(() => {
+    const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
+    if (search.trim()) params.set('q', search.trim())
+    if (facilityId) params.set('facilityId', facilityId)
+    if (payerType) params.set('payerType', payerType)
+    if (showInactive) params.set('includeInactive', 'true')
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim()
-    // Searching reveals inactive patients even when the toggle is off.
-    const includeInactive = showInactive || q.length > 0
-    return patients.filter(p => {
-      if (!includeInactive && !p.active) return false
-      if (facilityId && p.facility.id !== facilityId) return false
-      if (payerType && !p.coverages.some(c => c.payerType === payerType)) return false
-      if (!q) return true
-      return (
-        `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
-        `${p.lastName} ${p.firstName}`.toLowerCase().includes(q) ||
-        (p.pccPatientId ?? '').toLowerCase().includes(q)
-      )
-    })
-  }, [patients, search, facilityId, payerType, showInactive])
+    const t = setTimeout(() => {
+      setLoading(true)
+      fetch(`/api/patients?${params}`).then(r => r.json()).then(data => {
+        setPatients(Array.isArray(data.patients) ? data.patients : [])
+        setTotal(data.total ?? 0)
+        setLoading(false)
+      })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [page, search, facilityId, payerType, showInactive])
+
+  // Changing any filter resets to page 1.
+  const onFilter = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(1) }
+
+  // Payer options are a fixed set; coverage data may not be synced yet.
+  const payerOptions = Object.keys(PAYER_LABELS)
+
+  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const to = Math.min(page * PAGE_SIZE, total)
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const columns: Column<Patient>[] = [
     { key: 'name', label: 'Patient', render: p => (
@@ -117,12 +119,12 @@ export default function DashboardPage() {
           type="text"
           placeholder="Search by name or MRN..."
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => onFilter(setSearch)(e.target.value)}
           className="flex-1 min-w-[220px] max-w-[320px] px-3 py-2 rounded-lg border border-border text-sm text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
         />
         <select
           value={facilityId}
-          onChange={e => setFacilityId(e.target.value)}
+          onChange={e => onFilter(setFacilityId)(e.target.value)}
           className="px-3 py-2 rounded-lg border border-border text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
         >
           <option value="">All facilities</option>
@@ -130,14 +132,14 @@ export default function DashboardPage() {
         </select>
         <select
           value={payerType}
-          onChange={e => setPayerType(e.target.value)}
+          onChange={e => onFilter(setPayerType)(e.target.value)}
           className="px-3 py-2 rounded-lg border border-border text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
         >
           <option value="">All payers</option>
           {payerOptions.map(pt => <option key={pt} value={pt}>{PAYER_LABELS[pt] ?? pt}</option>)}
         </select>
         <label className="flex items-center gap-2 text-sm text-text-muted cursor-pointer">
-          <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
+          <input type="checkbox" checked={showInactive} onChange={e => onFilter(setShowInactive)(e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
           Show inactive
         </label>
       </div>
@@ -145,7 +147,17 @@ export default function DashboardPage() {
       {loading ? (
         <div className="p-8 text-center text-text-muted text-sm">Loading patients...</div>
       ) : (
-        <Table columns={columns} rows={filtered} onRowClick={p => router.push(`/patients/${p.id}`)} empty="No patients found." />
+        <>
+          <Table columns={columns} rows={patients} onRowClick={p => router.push(`/patients/${p.id}`)} empty="No patients found." />
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-sm text-text-muted">Showing {from}-{to} of {total} patients</p>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</Button>
+              <span className="text-sm text-text-muted">Page {page} of {totalPages}</span>
+              <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
+            </div>
+          </div>
+        </>
       )}
     </PageShell>
   )

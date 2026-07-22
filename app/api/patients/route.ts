@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { PayerType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser, requireRole } from '@/lib/auth'
 
@@ -7,31 +8,44 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url)
   const q = searchParams.get('q')?.trim() ?? ''
+  const facilityId = searchParams.get('facilityId') ?? ''
+  const payerType = searchParams.get('payerType') ?? ''
   // A search spans active + inactive; the default list is active-only.
   const includeInactive = searchParams.get('includeInactive') === 'true' || q.length > 0
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '25', 10) || 25))
 
-  const patients = await prisma.patient.findMany({
-    where: {
-      ...(includeInactive ? {} : { active: true }),
-      ...(q
-        ? {
-            OR: [
-              { firstName: { contains: q, mode: 'insensitive' } },
-              { lastName: { contains: q, mode: 'insensitive' } },
-              { pccPatientId: { contains: q, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    },
-    include: {
-      facility: true,
-      coverages: { select: { payerType: true } },
-      _count: { select: { visits: true } },
-    },
-    orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-  })
+  const where = {
+    ...(includeInactive ? {} : { active: true }),
+    ...(facilityId ? { facilityId } : {}),
+    ...(payerType in PayerType ? { coverages: { some: { payerType: payerType as PayerType } } } : {}),
+    ...(q
+      ? {
+          OR: [
+            { firstName: { contains: q, mode: 'insensitive' as const } },
+            { lastName: { contains: q, mode: 'insensitive' as const } },
+            { pccPatientId: { contains: q, mode: 'insensitive' as const } },
+          ],
+        }
+      : {}),
+  }
 
-  return NextResponse.json(patients)
+  const [patients, total] = await Promise.all([
+    prisma.patient.findMany({
+      where,
+      include: {
+        facility: true,
+        coverages: { select: { payerType: true } },
+        _count: { select: { visits: true } },
+      },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.patient.count({ where }),
+  ])
+
+  return NextResponse.json({ patients, total, page, limit })
 }
 
 export async function POST(req: Request) {

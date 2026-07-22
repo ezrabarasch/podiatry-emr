@@ -13,6 +13,7 @@ const CLINICAL: Item[] = [
 const ADMIN: Item[] = [
   { label: 'Users', href: '/admin/users', match: p => p.startsWith('/admin/users') },
   { label: 'Facilities', href: '/admin/facilities', match: p => p.startsWith('/admin/facilities') },
+  { label: 'Integrations', href: '/admin/integrations', match: p => p.startsWith('/admin/integrations') },
   { label: 'Billing', href: '/admin/billing', match: p => p.startsWith('/admin/billing') },
   { label: 'Sessions', href: '/admin/sessions', match: p => p.startsWith('/admin/sessions') },
 ]
