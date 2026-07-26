@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser, requireRole } from '@/lib/auth'
+import { pageParams } from '@/lib/pagination'
 
 export async function GET(
   req: Request,
@@ -9,19 +10,25 @@ export async function GET(
   if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await context.params
+  const { page, limit, skip, take } = pageParams(new URL(req.url).searchParams)
 
-  const visits = await prisma.visit.findMany({
-    where: { patientId: id },
-    include: {
-      provider: {
-        select: { firstName: true, lastName: true, credentials: true }
+  const [visits, total] = await Promise.all([
+    prisma.visit.findMany({
+      where: { patientId: id },
+      include: {
+        provider: {
+          select: { firstName: true, lastName: true, credentials: true }
+        },
+        note: { select: { cptCodes: true } },
       },
-      note: { select: { cptCodes: true } },
-    },
-    orderBy: { visitDate: 'desc' },
-  })
+      orderBy: { visitDate: 'desc' },
+      skip,
+      take,
+    }),
+    prisma.visit.count({ where: { patientId: id } }),
+  ])
 
-  return NextResponse.json(visits)
+  return NextResponse.json({ visits, total, page, limit })
 }
 
 export async function POST(

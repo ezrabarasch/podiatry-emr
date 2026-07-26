@@ -8,6 +8,7 @@ import Card from '@/app/components/Card'
 import Badge from '@/app/components/Badge'
 import Button from '@/app/components/Button'
 import Table, { type Column } from '@/app/components/Table'
+import Pagination, { usePaged } from '@/app/components/Pagination'
 
 interface Coverage {
   id: string
@@ -24,6 +25,7 @@ interface Diagnosis {
   id: string
   icd10: string
   description: string
+  active: boolean
   syncedAt: string
 }
 
@@ -46,7 +48,11 @@ interface Patient {
   medicalRecordNumber: string | null
   active: boolean
   coverages: Coverage[]
-  diagnoses: Diagnosis[]
+  // Summary only — the tabs page their own data.
+  diagnoses: { syncedAt: string }[]
+  visits: { visitDate: string; visitType: string; status: string }[]
+  _count: { visits: number; diagnoses: number }
+  signedVisitCount: number
 }
 
 interface Visit {
@@ -96,6 +102,36 @@ interface Contact {
   officePhone: string | null
 }
 
+interface Observation {
+  id: string
+  type: string
+  value: number | null
+  diastolicValue: number | null
+  systolicValue: number | null
+  unit: string | null
+  method: string | null
+  recordedDate: string
+  recordedBy: string | null
+}
+
+interface Immunization {
+  id: string
+  immunization: string | null
+  administrationDateTime: string | null
+  lotNumber: string | null
+  manufacturerName: string | null
+  given: boolean
+}
+
+interface Practitioner {
+  id: string
+  firstName: string | null
+  lastName: string | null
+  providerType: string | null
+  relation: string | null
+  npi: string | null
+}
+
 const fmt = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 const calcAge = (dob: string) =>
@@ -104,7 +140,24 @@ const VISIT_TYPE: Record<string, string> = { new_patient: 'New patient', establi
 const initials = (p: Patient) => `${p.firstName[0] ?? ''}${p.lastName[0] ?? ''}`.toUpperCase()
 const fmtSize = (b: number) => (b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`)
 
-const TABS = ['Visits', 'Diagnoses', 'Demos', 'Insurance', 'Medications', 'Uploads', 'Notes'] as const
+// Observation types are stored as codes (O2_SAT, HEART_RATE, …).
+const obsType = (t: string) => t.replace(/_/g, ' ')
+const obsValue = (o: Observation) =>
+  o.type === 'BP'
+    ? [o.systolicValue, o.diastolicValue].every(v => v !== null)
+      ? `${o.systolicValue}/${o.diastolicValue}`
+      : '—'
+    : o.value !== null ? String(o.value) : '—'
+
+const MAX_ALLERGY_TAGS = 5
+
+// Avoids flashing an empty state while the first page is in flight.
+const emptyText = (loading: boolean, text: string) => (loading ? 'Loading...' : text)
+
+const TABS = [
+  'Visits', 'Diagnoses', 'Vitals', 'Demos', 'Insurance',
+  'Providers', 'Medications', 'Immunizations', 'Uploads', 'Notes',
+] as const
 type Tab = typeof TABS[number]
 
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
@@ -123,15 +176,22 @@ export default function PatientPage() {
   const patientId = params.id as string
 
   const [patient, setPatient] = useState<Patient | null>(null)
-  const [visits, setVisits] = useState<Visit[]>([])
   const [uploads, setUploads] = useState<Upload[]>([])
-  const [medications, setMedications] = useState<Medication[]>([])
   const [allergies, setAllergies] = useState<Allergy[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [tab, setTab] = useState<Tab>('Visits')
   const fileInput = useRef<HTMLInputElement>(null)
+
+  // Each paginated tab fetches only while it is the active tab.
+  const on = (t: Tab, path: string) => (tab === t ? `/api/patients/${patientId}/${path}` : null)
+  const visits = usePaged<Visit>(on('Visits', 'visits'), 'visits')
+  const diagnoses = usePaged<Diagnosis>(on('Diagnoses', 'diagnoses'), 'diagnoses')
+  const vitals = usePaged<Observation>(on('Vitals', 'observations'), 'observations')
+  const providers = usePaged<Practitioner>(on('Providers', 'practitioners'), 'practitioners')
+  const medications = usePaged<Medication>(on('Medications', 'medications'), 'medications')
+  const immunizations = usePaged<Immunization>(on('Immunizations', 'immunizations'), 'immunizations')
 
   const loadUploads = () =>
     fetch(`/api/patients/${patientId}/uploads`).then(r => r.json()).then(u => setUploads(Array.isArray(u) ? u : []))
@@ -140,16 +200,12 @@ export default function PatientPage() {
     const json = (path: string) => fetch(`/api/patients/${patientId}${path}`).then(r => r.json())
     Promise.all([
       json(''),
-      json('/visits'),
       json('/uploads'),
-      json('/medications'),
       json('/allergies'),
       json('/contacts'),
-    ]).then(([p, v, u, m, a, c]) => {
+    ]).then(([p, u, a, c]) => {
       setPatient(p)
-      setVisits(Array.isArray(v) ? v : [])
       setUploads(Array.isArray(u) ? u : [])
-      setMedications(Array.isArray(m) ? m : [])
       setAllergies(Array.isArray(a) ? a : [])
       setContacts(Array.isArray(c) ? c : [])
       setLoading(false)
@@ -184,13 +240,14 @@ export default function PatientPage() {
   if (loading) return <PageShell><p className="text-text-muted text-sm">Loading...</p></PageShell>
   if (!patient) return <PageShell><p className="text-text-muted text-sm">Patient not found.</p></PageShell>
 
-  const signed = visits.filter(v => v.status === 'signed').length
-  const lastVisit = visits[0]
+  const totalVisits = patient._count.visits
+  const signed = patient.signedVisitCount
+  const lastVisit = patient.visits[0]
   const syncedDate = patient.diagnoses[0] ? fmt(patient.diagnoses[0].syncedAt) : '—'
 
-  const ec = contacts.find(c => /emerg/i.test(c.contactType ?? '') || /emerg/i.test(c.relationship ?? '')) ?? contacts[0]
+  const ec = contacts.find(c => /emerg/i.test(c.contactType ?? '') || /emerg/i.test(c.relationship ?? ''))
   const ecName = ec ? [ec.firstName, ec.lastName].filter(Boolean).join(' ') : ''
-  const ecPhone = ec ? (ec.cellPhone ?? ec.homePhone ?? ec.officePhone ?? '') : ''
+  const ecPhone = ec ? (ec.homePhone ?? ec.cellPhone ?? ec.officePhone ?? '') : ''
 
   const visitColumns: Column<Visit>[] = [
     { key: 'date', label: 'Date of Service', render: v => <span className="font-medium text-text">{fmt(v.visitDate)}</span> },
@@ -214,6 +271,33 @@ export default function PatientPage() {
     { key: 'status', label: 'Status', render: m => <span className="text-text-muted capitalize">{m.status ?? '—'}</span> },
     { key: 'start', label: 'Start', render: m => <span className="text-text-muted">{fmt(m.startDate)}</span> },
     { key: 'end', label: 'End', render: m => <span className="text-text-muted">{fmt(m.endDate)}</span> },
+  ]
+
+  const vitalColumns: Column<Observation>[] = [
+    { key: 'date', label: 'Date', render: o => <span className="font-medium text-text">{fmt(o.recordedDate)}</span> },
+    { key: 'type', label: 'Type', render: o => <span className="text-text-muted capitalize">{obsType(o.type)}</span> },
+    { key: 'value', label: 'Value', render: o => <span className="text-text font-medium">{obsValue(o)}</span> },
+    { key: 'unit', label: 'Unit', render: o => <span className="text-text-muted">{o.unit ?? '—'}</span> },
+    { key: 'by', label: 'Recorded By', render: o => <span className="text-text-muted">{o.recordedBy ?? '—'}</span> },
+  ]
+
+  const immunizationColumns: Column<Immunization>[] = [
+    { key: 'vaccine', label: 'Vaccine', render: i => <span className="font-medium text-text">{i.immunization ?? '—'}</span> },
+    { key: 'date', label: 'Date Administered', render: i => <span className="text-text-muted">{fmt(i.administrationDateTime)}</span> },
+    { key: 'lot', label: 'Lot Number', render: i => <span className="text-text-muted font-mono text-xs">{i.lotNumber ?? '—'}</span> },
+    { key: 'manufacturer', label: 'Manufacturer', render: i => <span className="text-text-muted">{i.manufacturerName ?? '—'}</span> },
+    { key: 'given', label: 'Given', render: i => (
+      i.given ? <span className="text-success font-semibold">✓</span> : <span className="text-text-muted">—</span>
+    ) },
+  ]
+
+  const providerColumns: Column<Practitioner>[] = [
+    { key: 'name', label: 'Name', render: p => (
+      <span className="font-medium text-text">{[p.firstName, p.lastName].filter(Boolean).join(' ') || '—'}</span>
+    ) },
+    { key: 'type', label: 'Type', render: p => <span className="text-text-muted">{p.providerType ?? '—'}</span> },
+    { key: 'relation', label: 'Relation', render: p => <span className="text-text-muted">{p.relation ?? '—'}</span> },
+    { key: 'npi', label: 'NPI', render: p => <span className="text-text-muted font-mono text-xs">{p.npi ?? '—'}</span> },
   ]
 
   return (
@@ -257,8 +341,8 @@ export default function PatientPage() {
           <div className="flex divide-x divide-border">
             <div className="flex-1 p-4">
               <p className="text-xs font-medium text-text-muted uppercase tracking-wide">Total Visits</p>
-              <p className="text-2xl font-bold text-text mt-1">{visits.length}</p>
-              <p className="text-xs text-text-muted mt-0.5">{signed} signed · {visits.length - signed} draft</p>
+              <p className="text-2xl font-bold text-text mt-1">{totalVisits}</p>
+              <p className="text-xs text-text-muted mt-0.5">{signed} signed · {totalVisits - signed} draft</p>
             </div>
             <div className="flex-1 p-4">
               <p className="text-xs font-medium text-text-muted uppercase tracking-wide">Last Visit</p>
@@ -273,19 +357,22 @@ export default function PatientPage() {
           {allergies.length === 0 ? (
             <p className="text-sm text-text-muted mt-2">None on file</p>
           ) : (
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {allergies.map(a => (
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              {allergies.slice(0, MAX_ALLERGY_TAGS).map(a => (
                 <span key={a.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-danger border border-red-200">
                   ⚠ {a.allergen}{a.severity ? ` · ${a.severity}` : ''}
                 </span>
               ))}
+              {allergies.length > MAX_ALLERGY_TAGS && (
+                <span className="text-xs text-text-muted">+ {allergies.length - MAX_ALLERGY_TAGS} more</span>
+              )}
             </div>
           )}
         </Card>
 
         <Card padding="p-4">
           <p className="text-xs font-medium text-text-muted uppercase tracking-wide">Active Diagnoses</p>
-          <p className="text-2xl font-bold text-text mt-1">{patient.diagnoses.length}</p>
+          <p className="text-2xl font-bold text-text mt-1">{patient._count.diagnoses}</p>
           <p className="text-xs text-text-muted mt-0.5">From PCC · synced {syncedDate}</p>
         </Card>
       </div>
@@ -307,25 +394,38 @@ export default function PatientPage() {
 
       {/* Tab content */}
       {tab === 'Visits' && (
-        <Table columns={visitColumns} rows={visits} onRowClick={v => router.push(`/visits/${v.id}`)} empty="No visits yet." />
+        <>
+          <Table columns={visitColumns} rows={visits.rows} onRowClick={v => router.push(`/visits/${v.id}`)} empty={emptyText(visits.loading, 'No visits yet.')} />
+          <Pagination {...visits} onPageChange={visits.setPage} onLimitChange={visits.setLimit} unit="visits" />
+        </>
       )}
 
       {tab === 'Diagnoses' && (
-        <Card padding="p-0">
-          {patient.diagnoses.length === 0 ? (
-            <div className="p-8 text-center text-text-muted text-sm">No diagnoses on file</div>
-          ) : (
-            <ul>
-              {patient.diagnoses.map(d => (
-                <li key={d.id} className="flex items-center gap-4 px-5 py-3 border-b border-[#F1F5F9] last:border-0">
-                  <span className="font-mono text-xs font-semibold px-2 py-1 rounded bg-[#DBEAFE] text-[#1D4ED8]">{d.icd10}</span>
-                  <span className="flex-1 text-sm text-text">{d.description}</span>
-                  <span className="text-xs text-text-muted">PCC · Active</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <>
+          <Card padding="p-0">
+            {diagnoses.rows.length === 0 ? (
+              <div className="p-8 text-center text-text-muted text-sm">{emptyText(diagnoses.loading, 'No diagnoses on file')}</div>
+            ) : (
+              <ul>
+                {diagnoses.rows.map(d => (
+                  <li key={d.id} className="flex items-center gap-4 px-5 py-3 border-b border-[#F1F5F9] last:border-0">
+                    <span className="font-mono text-xs font-semibold px-2 py-1 rounded bg-[#DBEAFE] text-[#1D4ED8]">{d.icd10}</span>
+                    <span className="flex-1 text-sm text-text">{d.description}</span>
+                    <Badge variant={d.active ? 'active' : 'inactive'} label={d.active ? 'Active' : 'Inactive'} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+          <Pagination {...diagnoses} onPageChange={diagnoses.setPage} onLimitChange={diagnoses.setLimit} unit="diagnoses" />
+        </>
+      )}
+
+      {tab === 'Vitals' && (
+        <>
+          <Table columns={vitalColumns} rows={vitals.rows} empty={emptyText(vitals.loading, 'No vitals on file')} />
+          <Pagination {...vitals} onPageChange={vitals.setPage} onLimitChange={vitals.setLimit} unit="vitals" />
+        </>
       )}
 
       {tab === 'Demos' && (
@@ -400,18 +500,25 @@ export default function PatientPage() {
         )
       )}
 
+      {tab === 'Providers' && (
+        <>
+          <Table columns={providerColumns} rows={providers.rows} empty={emptyText(providers.loading, 'No providers on file')} />
+          <Pagination {...providers} onPageChange={providers.setPage} onLimitChange={providers.setLimit} unit="providers" />
+        </>
+      )}
+
       {tab === 'Medications' && (
-        medications.length === 0 ? (
-          <Card>
-            <div className="py-16 text-center">
-              <div className="text-4xl mb-3">💊</div>
-              <h3 className="text-lg font-semibold text-text">Medications coming soon</h3>
-              <p className="text-sm text-text-muted mt-1 max-w-md mx-auto">Medication data will appear here once the PCC ETL pipeline is expanded to include medication records.</p>
-            </div>
-          </Card>
-        ) : (
-          <Table columns={medColumns} rows={medications} empty="No medications on file." />
-        )
+        <>
+          <Table columns={medColumns} rows={medications.rows} empty={emptyText(medications.loading, 'No medications on file')} />
+          <Pagination {...medications} onPageChange={medications.setPage} onLimitChange={medications.setLimit} unit="medications" />
+        </>
+      )}
+
+      {tab === 'Immunizations' && (
+        <>
+          <Table columns={immunizationColumns} rows={immunizations.rows} empty={emptyText(immunizations.loading, 'No immunizations on file')} />
+          <Pagination {...immunizations} onPageChange={immunizations.setPage} onLimitChange={immunizations.setLimit} unit="immunizations" />
+        </>
       )}
 
       {tab === 'Uploads' && (

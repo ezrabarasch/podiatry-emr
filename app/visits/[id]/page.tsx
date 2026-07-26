@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
 import PageShell from '@/app/components/PageShell'
 import Badge from '@/app/components/Badge'
 import Button from '@/app/components/Button'
+import { formatMedicationList } from '@/lib/medications'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -359,18 +360,21 @@ function SectionCard({
   onRadio,
   onCheckbox,
   readOnly,
+  banner,
 }: {
   section: SectionDef
   selections: Selections
   onRadio: (sectionId: string, key: string, value: string | null) => void
   onCheckbox: (sectionId: string, key: string, checkValue: string, checked: boolean) => void
   readOnly: boolean
+  banner?: ReactNode
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-4">
       <div className="px-6 py-3.5 bg-slate-50 border-b border-slate-200">
         <h3 className="text-sm font-semibold text-slate-700">{section.label}</h3>
       </div>
+      {banner}
       <div className="divide-y divide-slate-100">
         {section.groups.map((group, gi) => {
           const allCheckboxes = group.fields.every(f => f.type === 'checkbox')
@@ -441,6 +445,7 @@ export default function VisitPage() {
 
   const [visit, setVisit] = useState<VisitData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [medicationsList, setMedicationsList] = useState('')
   const [selections, setSelections] = useState<Selections>({})
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -507,6 +512,25 @@ export default function VisitPage() {
     })
     saveField(sectionId, fieldKey, checked ? checkValue : null)
   }, [saveField])
+
+  // Current medications live on the patient chart, not on this form. Pull them
+  // in and flag the HPI field so the careflow rule's {medications_list} token
+  // resolves when the note is generated.
+  useEffect(() => {
+    if (!visit) return
+    fetch(`/api/patients/${visit.patient.id}/medications?limit=100`)
+      .then(r => r.json())
+      .then(data => {
+        const list = formatMedicationList(Array.isArray(data.medications) ? data.medications : [])
+        setMedicationsList(list)
+        const alreadyImported = visit.fieldSelections.some(
+          s => s.section === 'hpi' && s.fieldKey === 'current_medications'
+        )
+        if (list && !readOnly && visit.status !== 'signed' && !alreadyImported) {
+          handleRadio('hpi', 'current_medications', 'imported')
+        }
+      })
+  }, [visit, readOnly, handleRadio])
 
   const handleCancelVisit = async () => {
     setCancelling(true)
@@ -604,6 +628,12 @@ export default function VisitPage() {
             onRadio={handleRadio}
             onCheckbox={handleCheckbox}
             readOnly={readOnly}
+            banner={section.id === 'hpi' && medicationsList ? (
+              <div className="px-6 py-3 border-b border-slate-100 bg-blue-50/60 text-xs text-slate-600">
+                <span className="font-semibold text-slate-700">Current medications (from chart): </span>
+                {medicationsList}
+              </div>
+            ) : undefined}
           />
         ))}
 

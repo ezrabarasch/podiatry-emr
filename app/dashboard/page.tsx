@@ -6,8 +6,7 @@ import { useRouter } from 'next/navigation'
 import PageShell from '@/app/components/PageShell'
 import Table, { type Column } from '@/app/components/Table'
 import Button from '@/app/components/Button'
-
-const PAGE_SIZE = 25
+import Pagination, { PAGE_SIZES } from '@/app/components/Pagination'
 
 interface Facility {
   id: string
@@ -46,7 +45,9 @@ export default function DashboardPage() {
   const [patients, setPatients] = useState<Patient[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(PAGE_SIZES[0])
   const [facilities, setFacilities] = useState<Facility[]>([])
+  const [payerOptions, setPayerOptions] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [facilityId, setFacilityId] = useState('')
@@ -57,11 +58,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetch('/api/facilities').then(r => r.json()).then(facs => setFacilities(Array.isArray(facs) ? facs : []))
+    fetch('/api/coverages/payer-types').then(r => r.json()).then(pts => setPayerOptions(Array.isArray(pts) ? pts : []))
   }, [])
 
   // Fetch the current page whenever filters or the page change (debounced for typing).
   useEffect(() => {
-    const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) })
     if (search.trim()) params.set('q', search.trim())
     if (facilityId) params.set('facilityId', facilityId)
     if (payerType) params.set('payerType', payerType)
@@ -76,17 +78,10 @@ export default function DashboardPage() {
       })
     }, 250)
     return () => clearTimeout(t)
-  }, [page, search, facilityId, payerType, showInactive])
+  }, [page, limit, search, facilityId, payerType, showInactive])
 
   // Changing any filter resets to page 1.
   const onFilter = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(1) }
-
-  // Payer options are a fixed set; coverage data may not be synced yet.
-  const payerOptions = Object.keys(PAYER_LABELS)
-
-  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
-  const to = Math.min(page * PAGE_SIZE, total)
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const columns: Column<Patient>[] = [
     { key: 'name', label: 'Patient', render: p => (
@@ -149,14 +144,14 @@ export default function DashboardPage() {
       ) : (
         <>
           <Table columns={columns} rows={patients} onRowClick={p => router.push(`/patients/${p.id}`)} empty="No patients found." />
-          <div className="flex items-center justify-between mt-4">
-            <p className="text-sm text-text-muted">Showing {from}-{to} of {total} patients</p>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</Button>
-              <span className="text-sm text-text-muted">Page {page} of {totalPages}</span>
-              <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
-            </div>
-          </div>
+          <Pagination
+            total={total}
+            page={page}
+            limit={limit}
+            onPageChange={setPage}
+            onLimitChange={l => { setLimit(l); setPage(1) }}
+            unit="patients"
+          />
         </>
       )}
     </PageShell>

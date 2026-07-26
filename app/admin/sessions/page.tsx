@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
 import AdminShell from '@/app/admin/AdminShell'
+import Pagination, { usePaged } from '@/app/components/Pagination'
 
 interface SessionLog {
   id: string
@@ -22,25 +23,18 @@ const ACTION_CLS: Record<string, string> = {
 }
 
 export default function AdminSessionsPage() {
-  const [logs, setLogs] = useState<SessionLog[]>([])
-  const [loading, setLoading] = useState(true)
   const [username, setUsername] = useState('')
   const [action, setAction] = useState('')
 
-  const load = useCallback(() => {
-    setLoading(true)
-    const params = new URLSearchParams()
-    if (username.trim()) params.set('username', username.trim())
-    if (action) params.set('action', action)
-    fetch(`/api/admin/sessions?${params.toString()}`)
-      .then(r => r.json())
-      .then(data => {
-        setLogs(Array.isArray(data) ? data : [])
-        setLoading(false)
-      })
-  }, [username, action])
+  const filters = new URLSearchParams()
+  if (username.trim()) filters.set('username', username.trim())
+  if (action) filters.set('action', action)
 
-  useEffect(() => { load() }, [load])
+  const paged = usePaged<SessionLog>(`/api/admin/sessions?${filters}`, 'logs')
+  const { rows: logs, loading } = paged
+
+  // Changing any filter resets to page 1.
+  const onFilter = (setter: (v: string) => void) => (v: string) => { setter(v); paged.setPage(1) }
 
   const fmt = (d: string) =>
     new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
@@ -57,12 +51,12 @@ export default function AdminSessionsPage() {
           type="text"
           placeholder="Filter by username..."
           value={username}
-          onChange={e => setUsername(e.target.value)}
+          onChange={e => onFilter(setUsername)(e.target.value)}
           className="px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
         <select
           value={action}
-          onChange={e => setAction(e.target.value)}
+          onChange={e => onFilter(setAction)(e.target.value)}
           className="px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="">All actions</option>
@@ -100,6 +94,10 @@ export default function AdminSessionsPage() {
           </table>
         )}
       </div>
+
+      {!loading && (
+        <Pagination {...paged} onPageChange={paged.setPage} onLimitChange={paged.setLimit} unit="events" />
+      )}
     </AdminShell>
   )
 }

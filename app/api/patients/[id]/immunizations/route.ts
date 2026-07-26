@@ -12,15 +12,16 @@ export async function GET(
   const { id } = await context.params
   const { page, limit, skip, take } = pageParams(new URL(req.url).searchParams)
 
-  const [medications, total] = await Promise.all([
-    prisma.patientMedication.findMany({
+  const [immunizations, total] = await Promise.all([
+    prisma.patientImmunization.findMany({
       where: { patientId: id },
-      orderBy: { description: 'asc' },
+      // Postgres sorts NULLs first on DESC; undated records belong at the end.
+      orderBy: { administrationDateTime: { sort: 'desc', nulls: 'last' } },
       skip,
       take,
     }),
-    prisma.patientMedication.count({ where: { patientId: id } }),
+    prisma.patientImmunization.count({ where: { patientId: id } }),
   ])
 
-  return NextResponse.json({ medications, total, page, limit })
+  return NextResponse.json({ immunizations, total, page, limit })
 }

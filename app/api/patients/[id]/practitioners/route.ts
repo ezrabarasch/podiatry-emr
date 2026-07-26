@@ -12,15 +12,15 @@ export async function GET(
   const { id } = await context.params
   const { page, limit, skip, take } = pageParams(new URL(req.url).searchParams)
 
-  const [medications, total] = await Promise.all([
-    prisma.patientMedication.findMany({
+  const [practitioners, total] = await Promise.all([
+    prisma.patientPractitioner.findMany({
       where: { patientId: id },
-      orderBy: { description: 'asc' },
+      orderBy: { providerType: 'asc' },
       skip,
       take,
     }),
-    prisma.patientMedication.count({ where: { patientId: id } }),
+    prisma.patientPractitioner.count({ where: { patientId: id } }),
   ])
 
-  return NextResponse.json({ medications, total, page, limit })
+  return NextResponse.json({ practitioners, total, page, limit })
 }

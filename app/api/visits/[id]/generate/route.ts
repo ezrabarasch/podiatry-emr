@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
+import { formatMedicationList } from '@/lib/medications'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lookup tables for codes used in the at_risk_podiatry careflow
@@ -48,6 +49,8 @@ const CPT_DESCRIPTIONS: Record<string, string> = {
   'G8783': 'Blood pressure controlled/normal',
   'G8950': 'Blood pressure elevated',
 }
+
+const MEDICATIONS_TOKEN = '{medications_list}'
 
 function classRank(cls: string): number {
   if (cls === 'class_c') return 3
@@ -205,7 +208,18 @@ export async function GET(
     if (item.isStatic && noteLines.length > 0) noteLines.push('')
     noteLines.push(item.text)
   }
-  const noteText = noteLines.join('\n')
+  let noteText = noteLines.join('\n')
+
+  // ── Token substitution ─────────────────────────────────────────────────────
+  // The HPI current-medications rule carries a {medications_list} placeholder
+  // filled from the patient's chart rather than from a form selection.
+  if (noteText.includes(MEDICATIONS_TOKEN)) {
+    const medications = await prisma.patientMedication.findMany({
+      where: { patientId: visit.patientId },
+      orderBy: { description: 'asc' },
+    })
+    noteText = noteText.split(MEDICATIONS_TOKEN).join(formatMedicationList(medications) || 'none on file')
+  }
 
   // ── CPT qualifier billing alerts ───────────────────────────────────────────
   const billingAlerts: Array<{ code: string; message: string }> = []

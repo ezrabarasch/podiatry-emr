@@ -10,16 +10,23 @@ export async function GET(
 
   const { id } = await context.params
 
-  const patient = await prisma.patient.findUnique({
-    where: { id },
-    include: {
-      facility: true,
-      coverages: { where: { active: true }, orderBy: { isPrimary: 'desc' } },
-      diagnoses: { where: { active: true }, orderBy: { icd10: 'asc' } },
-    },
-  })
+  // The Visits and Diagnoses tabs page their own data; this route only carries
+  // the header/stat-card summary — counts plus the single latest row of each.
+  const [patient, signedVisitCount] = await Promise.all([
+    prisma.patient.findUnique({
+      where: { id },
+      include: {
+        facility: true,
+        coverages: { where: { active: true }, orderBy: { isPrimary: 'desc' } },
+        diagnoses: { where: { active: true }, orderBy: { syncedAt: 'desc' }, take: 1, select: { syncedAt: true } },
+        visits: { orderBy: { visitDate: 'desc' }, take: 1, select: { visitDate: true, visitType: true, status: true } },
+        _count: { select: { visits: true, diagnoses: { where: { active: true } } } },
+      },
+    }),
+    prisma.visit.count({ where: { patientId: id, status: 'signed' } }),
+  ])
 
   if (!patient) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  return NextResponse.json(patient)
+  return NextResponse.json({ ...patient, signedVisitCount })
 }

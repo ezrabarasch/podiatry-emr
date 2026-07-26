@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { PayerType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser, requireRole } from '@/lib/auth'
+import { pageParams } from '@/lib/pagination'
 
 export async function GET(req: Request) {
   if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -12,13 +13,15 @@ export async function GET(req: Request) {
   const payerType = searchParams.get('payerType') ?? ''
   // A search spans active + inactive; the default list is active-only.
   const includeInactive = searchParams.get('includeInactive') === 'true' || q.length > 0
-  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
-  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '25', 10) || 25))
+  const { page, limit, skip, take } = pageParams(searchParams)
 
   const where = {
     ...(includeInactive ? {} : { active: true }),
     ...(facilityId ? { facilityId } : {}),
-    ...(payerType in PayerType ? { coverages: { some: { payerType: payerType as PayerType } } } : {}),
+    // Payer filter matches the patient's primary coverage only.
+    ...(payerType in PayerType
+      ? { coverages: { some: { payerType: payerType as PayerType, isPrimary: true } } }
+      : {}),
     ...(q
       ? {
           OR: [
@@ -39,8 +42,8 @@ export async function GET(req: Request) {
         _count: { select: { visits: true } },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-      skip: (page - 1) * limit,
-      take: limit,
+      skip,
+      take,
     }),
     prisma.patient.count({ where }),
   ])
