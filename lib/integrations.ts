@@ -5,6 +5,7 @@ export const FREQUENCIES = {
   EVERY_6H: { label: 'Every 6h', cron: '0 */6 * * *' },
   DAILY_1AM: { label: 'Daily 1am', cron: '0 1 * * *' },
   WEEKLY_MON_1AM: { label: 'Weekly Mon 1am', cron: '0 1 * * 1' },
+  MONTHLY_1ST_1AM: { label: 'Monthly (1st) 1am', cron: '0 1 1 * *' },
 } as const
 
 export type Frequency = keyof typeof FREQUENCIES
@@ -25,7 +26,7 @@ export const PCC_RESOURCES: { resource: string; label: string; frequency: Freque
   { resource: 'therapy', label: 'Therapy', frequency: 'WEEKLY_MON_1AM' },
   { resource: 'assessments', label: 'Assessments', frequency: 'WEEKLY_MON_1AM' },
   { resource: 'practitioners', label: 'Practitioners', frequency: 'WEEKLY_MON_1AM' },
-  { resource: 'episodes_of_care', label: 'Episodes of Care', frequency: 'WEEKLY_MON_1AM' },
+  { resource: 'episodes_of_care', label: 'Episodes of Care', frequency: 'MONTHLY_1ST_1AM' },
 ]
 
 export const RESOURCE_LABELS: Record<string, string> = Object.fromEntries(

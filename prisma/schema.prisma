@@ -193,17 +193,39 @@ model Patient {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model PatientDiagnosis {
-  id          String   @id @default(uuid())
-  patientId   String
-  icd10       String
-  description String
-  active      Boolean  @default(true)
-  syncedAt    DateTime @default(now())
+  id                    String   @id @default(uuid())
+  patientId             String
+  icd10                 String
+  description           String
+  firstAssertedAt       DateTime @default(now())
+  lastConfirmedAt       DateTime @default(now())
+  // Renamed from lastConfirmedById - holds a visitId, not a person id.
+  // NULL = externally-sourced (e.g. PCC sync), no signed visit behind it.
+  lastAssertedByVisitId String?
+  active                Boolean  @default(true)
+  syncedAt              DateTime @default(now())
 
-  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient             Patient                     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  lastAssertedByVisit Visit?                      @relation("DiagnosisLastAssertedBy", fields: [lastAssertedByVisitId], references: [id], onDelete: SetNull)
+  assertions          PatientDiagnosisAssertion[]
 
+  @@unique([patientId, icd10])
   @@index([patientId])
   @@map("patient_diagnoses")
+}
+
+model PatientDiagnosisAssertion {
+  id                 String           @id @default(uuid())
+  patientDiagnosisId String
+  visitId            String
+  careflowType       CareflowType     // which service line asserted it
+  assertedAt         DateTime         @default(now())
+
+  patientDiagnosis   PatientDiagnosis @relation(fields: [patientDiagnosisId], references: [id], onDelete: Cascade)
+  visit              Visit            @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@unique([patientDiagnosisId, visitId])
+  @@map("patient_diagnosis_assertions")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -275,6 +297,10 @@ model Visit {
   emrImport      VisitEmrImport?
   fieldSelections VisitFieldSelection[]
   note           VisitNote?
+  diagnosisAssertions        PatientDiagnosisAssertion[]
+  medicationAssertions       PatientMedicationAssertion[]
+  lastAssertedForDiagnoses   PatientDiagnosis[]  @relation("DiagnosisLastAssertedBy")
+  lastAssertedForMedications PatientMedication[] @relation("MedicationLastAssertedBy")
 
   @@map("visits")
 }
@@ -426,26 +452,52 @@ model CptQualifierRule {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model PatientMedication {
-  id          String    @id @default(uuid())
-  patientId   String
-  pccOrderId  String?
-  description String
-  status      String?
-  startDate   DateTime?
-  endDate     DateTime?
-  directions  String?
-  strength    String?
-  strengthUOM String?
-  rxNormId    String?
-  generic     Boolean   @default(false)
-  narcotic    Boolean   @default(false)
-  orderDate   DateTime?
-  syncedAt    DateTime  @default(now())
+  id                    String    @id @default(uuid())
+  patientId             String
+  name                  String
+  dosage                String?
+  frequency             String?
+  firstAssertedAt       DateTime  @default(now())
+  lastConfirmedAt       DateTime  @default(now())
+  // Renamed from lastConfirmedById - holds a visitId, not a person id.
+  // NULL = externally-sourced (e.g. PCC sync), no signed visit behind it.
+  lastAssertedByVisitId String?
+  active                Boolean   @default(true)
+  pccOrderId            String?
+  description           String?
+  status                String?
+  startDate             DateTime?
+  endDate               DateTime?
+  directions            String?
+  strength              String?
+  strengthUOM           String?
+  rxNormId              String?
+  generic               Boolean?  @default(false)
+  narcotic              Boolean?  @default(false)
+  orderDate             DateTime?
+  syncedAt              DateTime  @default(now())
 
-  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient             Patient                      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  lastAssertedByVisit Visit?                       @relation("MedicationLastAssertedBy", fields: [lastAssertedByVisitId], references: [id], onDelete: SetNull)
+  assertions          PatientMedicationAssertion[]
 
   @@unique([patientId, pccOrderId])
+  @@unique([patientId, name, dosage, frequency])
   @@map("patient_medications")
+}
+
+model PatientMedicationAssertion {
+  id                  String            @id @default(uuid())
+  patientMedicationId String
+  visitId             String
+  careflowType        CareflowType
+  assertedAt          DateTime          @default(now())
+
+  patientMedication   PatientMedication @relation(fields: [patientMedicationId], references: [id], onDelete: Cascade)
+  visit               Visit             @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@unique([patientMedicationId, visitId])
+  @@map("patient_medication_assertions")
 }
 
 model PatientAllergy {
@@ -699,4 +751,67 @@ model IntegrationSyncConfig {
 
   @@unique([sourceId, resourceName])
   @@map("integration_sync_configs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MULTI-SERVICE-LINE FOUNDATION — formally adopting tables that already exist
+// in production (hand-built matching the 60592ae design, reconciled 2026-07-29)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum CodeSystem {
+  icd10
+  cpt
+}
+
+model Code {
+  id          String     @id @default(uuid())
+  system      CodeSystem
+  code        String
+  description String
+
+  @@unique([system, code])
+  @@map("codes")
+}
+
+model CareflowSection {
+  id           String       @id @default(uuid())
+  careflowType CareflowType @default(at_risk_podiatry)
+  sectionId    String       // e.g. "vascular_exam" — matches CareflowRule.section
+  label        String       // e.g. "Vascular Exam"
+  position     Int          @default(0)
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  groups       CareflowFieldGroup[]
+
+  @@unique([careflowType, sectionId])
+  @@map("careflow_sections")
+}
+
+model CareflowFieldGroup {
+  id          String          @id @default(uuid())
+  sectionId   String
+  groupLabel  String?
+  accentColor String?
+  position    Int             @default(0)
+
+  section     CareflowSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  fields      CareflowField[]
+
+  @@map("careflow_field_groups")
+}
+
+model CareflowField {
+  id         String             @id @default(uuid())
+  groupId    String
+  type       String             // field-type renderer registry key, e.g. "radio", "checkbox", "numeric"
+  fieldKey   String             // e.g. "dp_pulse_right" — matches CareflowRule.fieldKey
+  label      String
+  config     Json?              // shape depends on `type`
+  position   Int                @default(0)
+
+  group      CareflowFieldGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("careflow_fields")
 }

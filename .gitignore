@@ -45,3 +45,7 @@ next-env.d.ts
 # local tooling / scratch
 .claude/
 10140.txt
+
+# database dumps / backups
+backup_*.sql
+*.dump
