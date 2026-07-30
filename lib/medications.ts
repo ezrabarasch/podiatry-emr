@@ -1,5 +1,5 @@
 type MedicationLike = {
-  description: string
+  description: string | null
   strength?: string | null
   strengthUOM?: string | null
   directions?: string | null
