@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
+import { reconcilePatientDiagnoses } from '@/lib/careflow/patient-record'
 
 export async function POST(
   req: Request,
@@ -55,6 +56,20 @@ export async function POST(
     where: { id: visitId },
     data: { status: 'signed', signedAt: new Date() },
   })
+
+  // Reconcile into the patient-level, cross-service-line diagnosis list.
+  // Only happens here, at sign — never on draft saves. See
+  // lib/careflow/patient-record.ts for the no-duplicates guarantee.
+  //
+  // NOTE: medications are not reconciled here yet. Today medications are a
+  // read-only PCC import snapshot — the rules engine never asserts a
+  // medication the way it does diagnoses, so there's no signed-visit
+  // medication list to reconcile from. reconcilePatientMedications() exists
+  // and is ready once there's a source (e.g. a med-rec field on a form).
+  const signedDiagnoses = gen.diagnoses ?? []
+  if (Array.isArray(signedDiagnoses) && signedDiagnoses.length > 0) {
+    await reconcilePatientDiagnoses(visit.patientId, visitId, visit.careflowType, signedDiagnoses)
+  }
 
   return NextResponse.json(note)
 }
