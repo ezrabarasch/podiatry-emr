@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 import { reconcilePatientDiagnoses } from '@/lib/careflow/patient-record'
+import { assembleNote } from '@/app/api/visits/[id]/generate/route'
 
 export async function POST(
-  req: Request,
+  _req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   const { error } = await requireRole(['PROVIDER', 'ADMIN'])
@@ -21,16 +22,12 @@ export async function POST(
     return NextResponse.json({ error: 'Visit is already signed' }, { status: 400 })
   }
 
-  // Assemble the note from the generate endpoint (single source of truth for the
-  // careflow logic). Forward the auth cookie so the internal request is authed.
-  const origin = new URL(req.url).origin
-  const genRes = await fetch(`${origin}/api/visits/${visitId}/generate`, {
-    headers: { cookie: req.headers.get('cookie') ?? '' },
-  })
-  if (!genRes.ok) {
+  // Assemble the note directly (shared careflow logic, no HTTP self-fetch -
+  // avoids origin/protocol mismatches behind a reverse proxy).
+  const gen = await assembleNote(visitId)
+  if (!gen) {
     return NextResponse.json({ error: 'Failed to assemble note' }, { status: 500 })
   }
-  const gen = await genRes.json()
 
   const addendum =
     visit.fieldSelections.find(s => s.section === '_addendum' && s.fieldKey === 'text')?.value?.trim() || null
@@ -66,8 +63,17 @@ export async function POST(
   // medication the way it does diagnoses, so there's no signed-visit
   // medication list to reconcile from. reconcilePatientMedications() exists
   // and is ready once there's a source (e.g. a med-rec field on a form).
-  const signedDiagnoses = gen.diagnoses ?? []
-  if (Array.isArray(signedDiagnoses) && signedDiagnoses.length > 0) {
+  // gen.diagnoses is typed loosely (JsonArray on the signed-snapshot path).
+  // Narrow to well-formed {icd10, description} entries before reconciling -
+  // this both satisfies the type and guards against malformed rows.
+  const rawDiagnoses: unknown[] = Array.isArray(gen.diagnoses) ? gen.diagnoses : []
+  const signedDiagnoses = rawDiagnoses.filter(
+    (d): d is { icd10: string; description: string } =>
+      !!d && typeof d === 'object' &&
+      typeof (d as { icd10?: unknown }).icd10 === 'string' &&
+      typeof (d as { description?: unknown }).description === 'string'
+  )
+  if (signedDiagnoses.length > 0) {
     await reconcilePatientDiagnoses(visit.patientId, visitId, visit.careflowType, signedDiagnoses)
   }
 

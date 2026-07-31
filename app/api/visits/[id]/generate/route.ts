@@ -15,15 +15,11 @@ function classRank(cls: string): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-
-export async function GET(
-  _req: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { id: visitId } = await context.params
-
+// Assemble a visit's generated note. Callable directly (no HTTP) so both the
+// GET handler and the sign route share one source of truth for careflow logic.
+// Returns the note payload object, or null if the visit doesn't exist.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function assembleNote(visitId: string) {
   const visit = await prisma.visit.findUnique({
     where: { id: visitId },
     include: {
@@ -35,12 +31,12 @@ export async function GET(
     },
   })
 
-  if (!visit) return NextResponse.json({ error: 'Visit not found' }, { status: 404 })
+  if (!visit) return null
 
   // Return the saved snapshot for signed visits
   if (visit.status === 'signed' && visit.note) {
     const n = visit.note
-    return NextResponse.json({
+    return {
       noteText: n.noteText,
       procedureNotes: n.procedureNotes ?? [],
       specialSections: n.specialSections ?? [],
@@ -49,7 +45,7 @@ export async function GET(
       billingAlerts: n.billingAlerts ?? [],
       addendum: n.addendum ?? '',
       isSigned: true,
-    })
+    }
   }
 
   const careflowType = visit.careflowType
@@ -150,9 +146,6 @@ export async function GET(
   })
 
   // ── Assemble note text ─────────────────────────────────────────────────────
-  // Merge static (by position) and conditional (by priority) items.
-  // Static fragments act as section headers; blank lines are inserted before them.
-  // On ties, static comes first (section header precedes its findings).
   type NoteItem = { text: string; order: number; isStatic: boolean }
 
   const allItems: NoteItem[] = [
@@ -169,8 +162,6 @@ export async function GET(
   let noteText = noteLines.join('\n')
 
   // ── Token substitution ─────────────────────────────────────────────────────
-  // The HPI current-medications rule carries a {medications_list} placeholder
-  // filled from the patient's chart rather than from a form selection.
   if (noteText.includes(MEDICATIONS_TOKEN)) {
     const medications = await prisma.patientMedication.findMany({
       where: { patientId: visit.patientId },
@@ -193,8 +184,8 @@ export async function GET(
     }
   }
 
-  // ── Build response ─────────────────────────────────────────────────────────
-  return NextResponse.json({
+  // ── Build payload ──────────────────────────────────────────────────────────
+  return {
     noteText,
     procedureNotes: procedureNotesList,
     specialSections: specialSectionsList,
@@ -210,5 +201,19 @@ export async function GET(
     billingAlerts,
     addendum: fieldSelections.find(s => s.section === '_addendum' && s.fieldKey === 'text')?.value ?? '',
     isSigned: false,
-  })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function GET(
+  _req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id: visitId } = await context.params
+  const payload = await assembleNote(visitId)
+  if (!payload) return NextResponse.json({ error: 'Visit not found' }, { status: 404 })
+  return NextResponse.json(payload)
 }
