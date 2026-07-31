@@ -1,4 +1,4 @@
-import { PrismaClient, CareflowType } from '@prisma/client'
+import { PrismaClient, CareflowType, CodeSystem } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { PCC_RESOURCES, FREQUENCIES } from '../lib/integrations'
 
@@ -36,6 +36,56 @@ async function main() {
     })
   }
   console.log(`✓ ${seedUsers.length} users seeded (admin/provider/office)`)
+
+  // ── Reference codes (ICD-10 + CPT) ─────────────────────────────────────────
+  // Descriptions the note generator and patient chart look up by code.
+  const codes = [
+    { system: 'icd10', code: 'B35.1', description: 'Tinea unguium (onychomycosis)' },
+    { system: 'icd10', code: 'B35.3', description: 'Tinea pedis' },
+    { system: 'icd10', code: 'E11.40', description: 'Type 2 diabetes mellitus with diabetic neuropathy, unspecified' },
+    { system: 'icd10', code: 'F17.210', description: 'Nicotine dependence, cigarettes, uncomplicated' },
+    { system: 'icd10', code: 'I10', description: 'Essential (primary) hypertension' },
+    { system: 'icd10', code: 'I70.21', description: 'Atherosclerosis with intermittent claudication' },
+    { system: 'icd10', code: 'I73.9', description: 'Peripheral vascular disease, unspecified' },
+    { system: 'icd10', code: 'L60.0', description: 'Ingrowing nail' },
+    { system: 'icd10', code: 'L84', description: 'Corns and callosities' },
+    { system: 'icd10', code: 'L85', description: 'Other epidermal thickening' },
+    { system: 'icd10', code: 'L85.3', description: 'Xerosis cutis' },
+    { system: 'icd10', code: 'L89.8', description: 'Pressure ulcer of other site' },
+    { system: 'icd10', code: 'L97.411', description: 'Non-pressure chronic ulcer of right heel, unspecified severity' },
+    { system: 'icd10', code: 'L97.412', description: 'Non-pressure chronic ulcer of left heel, unspecified severity' },
+    { system: 'icd10', code: 'L98.8', description: 'Other specified disorders of skin and subcutaneous tissue' },
+    { system: 'icd10', code: 'M20.11', description: 'Hallux valgus (acquired), right foot' },
+    { system: 'icd10', code: 'M20.12', description: 'Hallux valgus (acquired), left foot' },
+    { system: 'icd10', code: 'M20.41', description: 'Other hammer toe(s) (acquired), right foot' },
+    { system: 'icd10', code: 'M20.42', description: 'Other hammer toe(s) (acquired), left foot' },
+    { system: 'icd10', code: 'M62.81', description: 'Muscle weakness, right lower leg' },
+    { system: 'icd10', code: 'M62.82', description: 'Muscle weakness, left lower leg' },
+    { system: 'icd10', code: 'M79.671', description: 'Pain in right foot' },
+    { system: 'icd10', code: 'M79.672', description: 'Pain in left foot' },
+    { system: 'icd10', code: 'R60.0', description: 'Localized edema' },
+    { system: 'icd10', code: 'Z89.411', description: 'Acquired absence of right great toe' },
+    { system: 'icd10', code: 'Z89.412', description: 'Acquired absence of left great toe' },
+    { system: 'icd10', code: 'Z89.419', description: 'Acquired absence of unspecified toe(s)' },
+    { system: 'cpt', code: '11055', description: 'Paring/cutting of benign hyperkeratotic lesion, single' },
+    { system: 'cpt', code: '11056', description: 'Paring/cutting, 2–4 lesions' },
+    { system: 'cpt', code: '11057', description: 'Paring/cutting, 4+ lesions' },
+    { system: 'cpt', code: '11720', description: 'Debridement of nail(s), 1–5' },
+    { system: 'cpt', code: '11721', description: 'Debridement of nail(s), 6–10' },
+    { system: 'cpt', code: '11750', description: 'Excision of nail and nail matrix (ingrown nail)' },
+    { system: 'cpt', code: 'G0108', description: 'Diabetes outpatient self-management training' },
+    { system: 'cpt', code: 'G8427', description: 'Documentation of current medications' },
+    { system: 'cpt', code: 'G8783', description: 'Blood pressure controlled/normal' },
+    { system: 'cpt', code: 'G8950', description: 'Blood pressure elevated' },
+  ]
+  for (const c of codes) {
+    await prisma.code.upsert({
+      where: { system_code: { system: c.system as CodeSystem, code: c.code } },
+      update: { description: c.description },
+      create: { system: c.system as CodeSystem, code: c.code, description: c.description },
+    })
+  }
+  console.log(`✓ ${codes.length} reference codes seeded (ICD-10 + CPT)`)
 
   // ─────────────────────────────────────────────────────────────────────────
   // CAREFLOW RULES
