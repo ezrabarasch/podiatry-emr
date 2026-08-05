@@ -132,6 +132,61 @@ interface Practitioner {
   npi: string | null
 }
 
+interface AdtRecord {
+  id: string
+  actionType: string | null
+  effectiveDateTime: string | null
+  roomDesc: string | null
+  bedDesc: string | null
+  unitDesc: string | null
+  floorDesc: string | null
+  payerName: string | null
+  transferReason: string | null
+  dischargeStatus: string | null
+}
+
+interface EpisodeOfCare {
+  id: string
+  name: string | null
+  type: string | null
+  status: string | null
+  startDate: string | null
+  endDate: string | null
+  payerName: string | null
+  model: string | null
+}
+
+interface DiagnosticReport {
+  id: string
+  reportName: string | null
+  reportType: string | null
+  reportStatus: string | null
+  category: string | null
+  effectiveDateTime: string | null
+  orderingPractitioner: string | null
+}
+
+interface CarePlan {
+  id: string
+  status: string | null
+  createdDate: string | null
+  nextReviewDate: string | null
+  closedDate: string | null
+  closureReason: string | null
+}
+
+interface TherapyTrack {
+  id: string
+  discipline: string | null
+  startOfCareDate: string | null
+  certificationStartDate: string | null
+  certificationEndDate: string | null
+  treatmentFreqPerWeek: string | null
+  therapyProvider: string | null
+  medicalDiagnosis: string | null
+  treatmentDiagnosis: string | null
+}
+
 const fmt = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 const calcAge = (dob: string) =>
@@ -155,10 +210,21 @@ const MAX_ALLERGY_TAGS = 5
 const emptyText = (loading: boolean, text: string) => (loading ? 'Loading...' : text)
 
 const TABS = [
-  'Visits', 'Diagnoses', 'Vitals', 'Demos', 'Insurance',
-  'Providers', 'Medications', 'Immunizations', 'Uploads', 'Notes',
+  'Visits', 'Admissions', 'Diagnoses', 'Vitals', 'Demos', 'Insurance',
+  'Providers', 'Medications', 'Immunizations', 'Reports', 'Care Plans',
+  'Therapy', 'Uploads', 'Notes',
 ] as const
 type Tab = typeof TABS[number]
+
+// Care plan status is free text from PCC; anything unrecognised reads as inactive.
+const CARE_PLAN_VARIANT: Record<string, 'active' | 'inactive' | 'completed'> = {
+  active: 'active',
+  inactive: 'inactive',
+  completed: 'completed',
+}
+
+// Two-part cells (room/bed, floor/unit) collapse to '—' only when both are empty.
+const pair = (a: string | null, b: string | null) => [a, b].filter(Boolean).join(' / ') || '—'
 
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -192,6 +258,12 @@ export default function PatientPage() {
   const providers = usePaged<Practitioner>(on('Providers', 'practitioners'), 'practitioners')
   const medications = usePaged<Medication>(on('Medications', 'medications'), 'medications')
   const immunizations = usePaged<Immunization>(on('Immunizations', 'immunizations'), 'immunizations')
+  // Admissions shows ADT records and episodes of care as two sections of one tab.
+  const adt = usePaged<AdtRecord>(on('Admissions', 'adt'), 'adt')
+  const episodes = usePaged<EpisodeOfCare>(on('Admissions', 'episodes-of-care'), 'episodesOfCare')
+  const reports = usePaged<DiagnosticReport>(on('Reports', 'diagnostic-reports'), 'diagnosticReports')
+  const carePlans = usePaged<CarePlan>(on('Care Plans', 'care-plans'), 'carePlans')
+  const therapy = usePaged<TherapyTrack>(on('Therapy', 'therapy'), 'therapy')
 
   const loadUploads = () =>
     fetch(`/api/patients/${patientId}/uploads`).then(r => r.json()).then(u => setUploads(Array.isArray(u) ? u : []))
@@ -300,6 +372,59 @@ export default function PatientPage() {
     { key: 'npi', label: 'NPI', render: p => <span className="text-text-muted font-mono text-xs">{p.npi ?? '—'}</span> },
   ]
 
+  const adtColumns: Column<AdtRecord>[] = [
+    { key: 'date', label: 'Date', render: r => <span className="font-medium text-text">{fmt(r.effectiveDateTime)}</span> },
+    { key: 'action', label: 'Action Type', render: r => <span className="text-text-muted">{r.actionType ?? '—'}</span> },
+    { key: 'room', label: 'Room / Bed', render: r => <span className="text-text-muted">{pair(r.roomDesc, r.bedDesc)}</span> },
+    { key: 'floor', label: 'Floor / Unit', render: r => <span className="text-text-muted">{pair(r.floorDesc, r.unitDesc)}</span> },
+    { key: 'payer', label: 'Payer', render: r => <span className="text-text-muted">{r.payerName ?? '—'}</span> },
+    { key: 'reason', label: 'Transfer Reason / Discharge Status', render: r => (
+      <span className="text-text-muted">{r.transferReason ?? r.dischargeStatus ?? '—'}</span>
+    ) },
+  ]
+
+  const episodeColumns: Column<EpisodeOfCare>[] = [
+    { key: 'name', label: 'Name', render: e => <span className="font-medium text-text">{e.name ?? '—'}</span> },
+    { key: 'type', label: 'Type', render: e => <span className="text-text-muted">{e.type ?? '—'}</span> },
+    { key: 'status', label: 'Status', render: e => <span className="text-text-muted capitalize">{e.status ?? '—'}</span> },
+    { key: 'start', label: 'Start Date', render: e => <span className="text-text-muted">{fmt(e.startDate)}</span> },
+    { key: 'end', label: 'End Date', render: e => <span className="text-text-muted">{fmt(e.endDate)}</span> },
+    { key: 'payer', label: 'Payer', render: e => <span className="text-text-muted">{e.payerName ?? '—'}</span> },
+    { key: 'model', label: 'Model', render: e => <span className="text-text-muted">{e.model ?? '—'}</span> },
+  ]
+
+  const reportColumns: Column<DiagnosticReport>[] = [
+    { key: 'date', label: 'Date', render: r => <span className="font-medium text-text">{fmt(r.effectiveDateTime)}</span> },
+    { key: 'name', label: 'Report Name', render: r => <span className="text-text">{r.reportName ?? '—'}</span> },
+    { key: 'type', label: 'Type', render: r => <span className="text-text-muted">{r.reportType ?? '—'}</span> },
+    { key: 'status', label: 'Status', render: r => <span className="text-text-muted capitalize">{r.reportStatus ?? '—'}</span> },
+    { key: 'category', label: 'Category', render: r => <span className="text-text-muted">{r.category ?? '—'}</span> },
+    { key: 'provider', label: 'Ordering Provider', render: r => <span className="text-text-muted">{r.orderingPractitioner ?? '—'}</span> },
+  ]
+
+  const carePlanColumns: Column<CarePlan>[] = [
+    { key: 'status', label: 'Status', render: c => (
+      c.status
+        ? <Badge variant={CARE_PLAN_VARIANT[c.status.toLowerCase()] ?? 'inactive'} label={c.status} />
+        : <span className="text-text-muted">—</span>
+    ) },
+    { key: 'created', label: 'Created Date', render: c => <span className="text-text-muted">{fmt(c.createdDate)}</span> },
+    { key: 'review', label: 'Next Review Date', render: c => <span className="text-text-muted">{fmt(c.nextReviewDate)}</span> },
+    { key: 'closed', label: 'Closed Date', render: c => <span className="text-text-muted">{fmt(c.closedDate)}</span> },
+    { key: 'reason', label: 'Closure Reason', render: c => <span className="text-text-muted">{c.closureReason ?? '—'}</span> },
+  ]
+
+  const therapyColumns: Column<TherapyTrack>[] = [
+    { key: 'discipline', label: 'Discipline', render: t => <span className="font-medium text-text">{t.discipline ?? '—'}</span> },
+    { key: 'soc', label: 'Start of Care', render: t => <span className="text-text-muted">{fmt(t.startOfCareDate)}</span> },
+    { key: 'certStart', label: 'Cert Start', render: t => <span className="text-text-muted">{fmt(t.certificationStartDate)}</span> },
+    { key: 'certEnd', label: 'Cert End', render: t => <span className="text-text-muted">{fmt(t.certificationEndDate)}</span> },
+    { key: 'freq', label: 'Frequency / Week', render: t => <span className="text-text-muted">{t.treatmentFreqPerWeek ?? '—'}</span> },
+    { key: 'provider', label: 'Provider', render: t => <span className="text-text-muted">{t.therapyProvider ?? '—'}</span> },
+    { key: 'medDx', label: 'Medical Diagnosis', render: t => <span className="text-text-muted">{t.medicalDiagnosis ?? '—'}</span> },
+    { key: 'txDx', label: 'Treatment Diagnosis', render: t => <span className="text-text-muted">{t.treatmentDiagnosis ?? '—'}</span> },
+  ]
+
   return (
     <PageShell breadcrumb={[{ label: 'Patients', href: '/dashboard' }, { label: `${patient.lastName}, ${patient.firstName}` }]}>
       {/* Header card */}
@@ -398,6 +523,21 @@ export default function PatientPage() {
           <Table columns={visitColumns} rows={visits.rows} onRowClick={v => router.push(`/visits/${v.id}`)} empty={emptyText(visits.loading, 'No visits yet.')} />
           <Pagination {...visits} onPageChange={visits.setPage} onLimitChange={visits.setLimit} unit="visits" />
         </>
+      )}
+
+      {tab === 'Admissions' && (
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-sm font-semibold text-text mb-3">ADT Records</h3>
+            <Table columns={adtColumns} rows={adt.rows} empty={emptyText(adt.loading, 'No admission records on file')} />
+            <Pagination {...adt} onPageChange={adt.setPage} onLimitChange={adt.setLimit} unit="records" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-text mb-3">Episodes of Care</h3>
+            <Table columns={episodeColumns} rows={episodes.rows} empty={emptyText(episodes.loading, 'No episodes of care on file')} />
+            <Pagination {...episodes} onPageChange={episodes.setPage} onLimitChange={episodes.setLimit} unit="episodes" />
+          </div>
+        </div>
       )}
 
       {tab === 'Diagnoses' && (
@@ -518,6 +658,27 @@ export default function PatientPage() {
         <>
           <Table columns={immunizationColumns} rows={immunizations.rows} empty={emptyText(immunizations.loading, 'No immunizations on file')} />
           <Pagination {...immunizations} onPageChange={immunizations.setPage} onLimitChange={immunizations.setLimit} unit="immunizations" />
+        </>
+      )}
+
+      {tab === 'Reports' && (
+        <>
+          <Table columns={reportColumns} rows={reports.rows} empty={emptyText(reports.loading, 'No diagnostic reports on file')} />
+          <Pagination {...reports} onPageChange={reports.setPage} onLimitChange={reports.setLimit} unit="reports" />
+        </>
+      )}
+
+      {tab === 'Care Plans' && (
+        <>
+          <Table columns={carePlanColumns} rows={carePlans.rows} empty={emptyText(carePlans.loading, 'No care plans on file')} />
+          <Pagination {...carePlans} onPageChange={carePlans.setPage} onLimitChange={carePlans.setLimit} unit="care plans" />
+        </>
+      )}
+
+      {tab === 'Therapy' && (
+        <>
+          <Table columns={therapyColumns} rows={therapy.rows} empty={emptyText(therapy.loading, 'No therapy records on file')} />
+          <Pagination {...therapy} onPageChange={therapy.setPage} onLimitChange={therapy.setLimit} unit="therapy records" />
         </>
       )}
 
