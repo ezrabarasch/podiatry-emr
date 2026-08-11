@@ -23,6 +23,7 @@ export default function EditFacilityPage() {
           ...emptyFacility,
           name: f.name ?? '',
           facilityType: f.facilityType ?? 'SNF',
+          practiceId: f.practiceId ?? '',
           address: f.address ?? '',
           npi: f.npi ?? '',
           posCode: f.posCode ?? '',

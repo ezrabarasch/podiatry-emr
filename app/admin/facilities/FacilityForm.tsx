@@ -1,13 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const inputCls = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
 const labelCls = 'block text-sm font-medium text-slate-700 mb-1'
 
+interface PracticeOption { id: string; name: string }
+
 export interface FacilityFormValues {
   name: string
   facilityType: string
+  practiceId: string
   address: string
   npi: string
   posCode: string
@@ -22,7 +25,7 @@ export interface FacilityFormValues {
 }
 
 export const emptyFacility: FacilityFormValues = {
-  name: '', facilityType: 'SNF', address: '', npi: '', posCode: '', pccFacilityId: '',
+  name: '', facilityType: 'SNF', practiceId: '', address: '', npi: '', posCode: '', pccFacilityId: '',
   adminContactName: '', adminContactPhone: '', adminContactEmail: '',
   donContactName: '', donContactPhone: '', donContactEmail: '', active: true,
 }
@@ -45,6 +48,13 @@ export default function FacilityForm({
   showActive?: boolean
 }) {
   const [form, setForm] = useState<FacilityFormValues>(initial)
+  const [practices, setPractices] = useState<PracticeOption[]>([])
+
+  useEffect(() => {
+    fetch('/api/admin/practices')
+      .then(r => r.json())
+      .then(data => setPractices(Array.isArray(data) ? data : []))
+  }, [])
 
   const set = (k: keyof FacilityFormValues) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
@@ -63,6 +73,13 @@ export default function FacilityForm({
             <option value="ALF">ALF</option>
           </select>
         </div>
+      </div>
+      <div>
+        <label className={labelCls}>Practice <span className="text-red-500">*</span></label>
+        <select className={inputCls} value={form.practiceId} onChange={set('practiceId')}>
+          <option value="" disabled>Select a practice...</option>
+          {practices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
       </div>
       <div>
         <label className={labelCls}>Address <span className="text-slate-400">(optional)</span></label>
@@ -132,7 +149,7 @@ export default function FacilityForm({
         <button onClick={onCancel} className="text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-4 py-2.5 rounded-lg">Cancel</button>
         <button
           onClick={() => onSubmit(form)}
-          disabled={!form.name.trim() || saving}
+          disabled={!form.name.trim() || !form.practiceId || saving}
           className="text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed px-5 py-2.5 rounded-lg"
         >
           {saving ? 'Saving...' : submitLabel}
