@@ -3,10 +3,21 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import AdminShell from '@/app/admin/AdminShell'
+import Badge from '@/app/components/Badge'
+import Button from '@/app/components/Button'
 import PracticeForm, { emptyPractice, type PracticeFormValues } from '../PracticeForm'
+import ProviderForm, { emptyProvider, type ProviderFormValues } from '../../providers/ProviderForm'
 
-interface PracticeProvider { id: string; firstName: string; lastName: string; credentials: string | null }
-interface ProviderOption { id: string; firstName: string; lastName: string; credentials: string | null }
+interface PracticeProvider {
+  id: string
+  firstName: string
+  lastName: string
+  credentials: string | null
+  npi: string | null
+  specialty: string | null
+  active: boolean
+  practiceCount: number
+}
 
 export default function EditPracticePage() {
   const router = useRouter()
@@ -18,10 +29,18 @@ export default function EditPracticePage() {
   const [saving, setSaving] = useState(false)
 
   const [providers, setProviders] = useState<PracticeProvider[]>([])
-  const [allProviders, setAllProviders] = useState<ProviderOption[]>([])
+  const [allProviders, setAllProviders] = useState<PracticeProvider[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState('')
   const [providerError, setProviderError] = useState('')
   const [providerBusy, setProviderBusy] = useState(false)
+
+  // Modal state — reuses ProviderForm for both create and edit.
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<'new' | 'edit'>('new')
+  const [modalInitial, setModalInitial] = useState<ProviderFormValues | null>(null)
+  const [modalEditingId, setModalEditingId] = useState<string | null>(null)
+  const [modalSaving, setModalSaving] = useState(false)
+  const [modalError, setModalError] = useState('')
 
   const loadPractice = useCallback(() => {
     fetch(`/api/admin/practices/${id}`)
@@ -83,6 +102,68 @@ export default function EditPracticePage() {
     }
   }
 
+  const openNewProviderModal = () => {
+    setModalMode('new')
+    setModalEditingId(null)
+    setModalError('')
+    setModalInitial({ ...emptyProvider, practiceIds: [id] })
+    setModalOpen(true)
+  }
+
+  const openEditProviderModal = async (providerId: string) => {
+    setModalError('')
+    const res = await fetch(`/api/admin/providers/${providerId}`)
+    if (!res.ok) {
+      setProviderError('Failed to load provider')
+      return
+    }
+    const p = await res.json()
+    setModalMode('edit')
+    setModalEditingId(providerId)
+    setModalInitial({
+      ...emptyProvider,
+      firstName: p.firstName ?? '',
+      lastName: p.lastName ?? '',
+      credentials: p.credentials ?? '',
+      email: p.email ?? '',
+      username: p.username ?? '',
+      npi: p.npi ?? '',
+      licenseNumber: p.licenseNumber ?? '',
+      specialty: p.specialty ?? '',
+      address: p.address ?? '',
+      phone: p.phone ?? '',
+      active: p.active ?? true,
+      practiceIds: Array.isArray(p.practices) ? p.practices.map((pr: { id: string }) => pr.id) : [],
+    })
+    setModalOpen(true)
+  }
+
+  const closeModal = () => {
+    setModalOpen(false)
+    setModalInitial(null)
+    setModalEditingId(null)
+    setModalError('')
+  }
+
+  const submitModal = async (values: ProviderFormValues) => {
+    setModalError('')
+    setModalSaving(true)
+    const url = modalMode === 'new' ? '/api/admin/providers' : `/api/admin/providers/${modalEditingId}`
+    const res = await fetch(url, {
+      method: modalMode === 'new' ? 'POST' : 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    })
+    if (res.ok) {
+      closeModal()
+      loadPractice()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setModalError(data.error ?? 'Failed to save provider')
+      setModalSaving(false)
+    }
+  }
+
   const save = async (values: PracticeFormValues) => {
     setError('')
     setSaving(true)
@@ -120,7 +201,7 @@ export default function EditPracticePage() {
         showActive
       />
 
-      <div className="max-w-2xl mt-8">
+      <div className="mt-8">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-slate-700">Providers</h3>
           <div className="flex items-center gap-2">
@@ -143,6 +224,7 @@ export default function EditPracticePage() {
             >
               Add
             </button>
+            <Button size="lg" onClick={openNewProviderModal}>+ New Provider</Button>
           </div>
         </div>
 
@@ -154,21 +236,64 @@ export default function EditPracticePage() {
           {providers.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-sm">No providers assigned yet.</div>
           ) : (
-            <ul>
-              {providers.map(p => (
-                <li key={p.id} className="flex items-center justify-between px-5 py-3 border-b border-slate-100 last:border-0">
-                  <span className="text-sm text-slate-700">
-                    {p.lastName}, {p.firstName}{p.credentials ? `, ${p.credentials}` : ''}
-                  </span>
-                  <button onClick={() => removeProvider(p.id)} className="text-sm font-medium text-red-600 hover:text-red-800">
-                    Remove
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  {['Name', 'Credentials', 'NPI', 'Specialty', 'Practices', 'Status', ''].map((h, i) => (
+                    <th key={i} className="text-left px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {providers.map(p => (
+                  <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td className="px-5 py-4 text-sm font-medium text-slate-800">{p.lastName}, {p.firstName}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600">{p.credentials ?? '—'}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600">{p.npi ?? '—'}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600">{p.specialty ?? '—'}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600">{p.practiceCount}</td>
+                    <td className="px-5 py-4"><Badge variant={p.active ? 'active' : 'inactive'} label={p.active ? 'Active' : 'Inactive'} /></td>
+                    <td className="px-5 py-4 text-right whitespace-nowrap">
+                      <button
+                        onClick={() => openEditProviderModal(p.id)}
+                        className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-4"
+                      >
+                        Edit
+                      </button>
+                      <button onClick={() => removeProvider(p.id)} className="text-sm font-medium text-red-600 hover:text-red-800">
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
+
+      {modalOpen && modalInitial && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeModal}>
+          <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h3 className="text-base font-semibold text-white">
+                {modalMode === 'new' ? 'New Provider' : 'Edit Provider'}
+              </h3>
+              <button onClick={closeModal} className="text-white/80 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <ProviderForm
+              initial={modalInitial}
+              onSubmit={submitModal}
+              onCancel={closeModal}
+              saving={modalSaving}
+              error={modalError}
+              submitLabel={modalMode === 'new' ? 'Create Provider' : 'Save Changes'}
+              showActive={modalMode === 'edit'}
+              isNew={modalMode === 'new'}
+            />
+          </div>
+        </div>
+      )}
     </AdminShell>
   )
 }

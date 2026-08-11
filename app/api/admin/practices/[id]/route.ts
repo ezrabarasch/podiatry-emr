@@ -15,7 +15,17 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
     include: {
       serviceTypes: true,
       facilities: { select: { id: true, name: true } },
-      providers: { include: { user: { select: { id: true, firstName: true, lastName: true, credentials: true } } } },
+      providers: {
+        include: {
+          user: {
+            select: {
+              id: true, firstName: true, lastName: true, credentials: true,
+              npi: true, specialty: true, active: true,
+              _count: { select: { practices: true } },
+            },
+          },
+        },
+      },
     },
   })
   if (!practice) return NextResponse.json({ error: 'Practice not found' }, { status: 404 })
@@ -24,7 +34,7 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
   return NextResponse.json({
     ...rest,
     serviceTypes: serviceTypes.map(st => st.careflowType),
-    providers: providers.map(pp => pp.user),
+    providers: providers.map(({ user: { _count, ...u } }) => ({ ...u, practiceCount: _count.practices })),
   })
 }
 
