@@ -15,7 +15,7 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
     include: {
       serviceTypes: true,
       facilities: { select: { id: true, name: true } },
-      providers: { include: { user: { select: { id: true, firstName: true, lastName: true } } } },
+      providers: { include: { user: { select: { id: true, firstName: true, lastName: true, credentials: true } } } },
     },
   })
   if (!practice) return NextResponse.json({ error: 'Practice not found' }, { status: 404 })

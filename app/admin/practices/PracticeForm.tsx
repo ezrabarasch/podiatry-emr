@@ -55,7 +55,7 @@ export default function PracticeForm({
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-6 max-w-2xl space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div>
           <label className={labelCls}>Name <span className="text-red-500">*</span></label>
           <input className={inputCls} value={form.name} onChange={set('name')} />
@@ -64,8 +64,6 @@ export default function PracticeForm({
           <label className={labelCls}>TIN <span className="text-slate-400">(optional)</span></label>
           <input className={inputCls} value={form.tin} onChange={set('tin')} />
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Group NPI <span className="text-slate-400">(optional)</span></label>
           <input className={inputCls} value={form.groupNpi} onChange={set('groupNpi')} />
@@ -74,14 +72,14 @@ export default function PracticeForm({
           <label className={labelCls}>Phone <span className="text-slate-400">(optional)</span></label>
           <input className={inputCls} value={form.phone} onChange={set('phone')} />
         </div>
+        <div>
+          <label className={labelCls}>Email <span className="text-slate-400">(optional)</span></label>
+          <input className={inputCls} type="email" value={form.email} onChange={set('email')} />
+        </div>
       </div>
       <div>
         <label className={labelCls}>Address <span className="text-slate-400">(optional)</span></label>
         <input className={inputCls} value={form.address} onChange={set('address')} />
-      </div>
-      <div>
-        <label className={labelCls}>Email <span className="text-slate-400">(optional)</span></label>
-        <input className={inputCls} type="email" value={form.email} onChange={set('email')} />
       </div>
 
       <div className="pt-2 border-t border-slate-100">
