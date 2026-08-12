@@ -57,6 +57,7 @@ enum Role {
   PROVIDER
   OFFICE
   ADMIN
+  SUPER_ADMIN
 }
 
 enum SessionAction {
@@ -64,6 +65,26 @@ enum SessionAction {
   LOGOUT
   FAILED
   LOCKED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANTS — the top of the hierarchy; a company/customer of the SaaS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  facilities Facility[]
+  practices  Practice[]
+  users      User[]
+  patients   Patient[]
+  visits     Visit[]
+
+  @@map("tenants")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,14 +105,18 @@ model Facility {
   donContactName    String?
   donContactPhone   String?
   donContactEmail   String?
-  practiceId    String?      // nullable — existing facilities predate Practice
+  practiceId    String?      // nullable — single-FK predecessor of practiceLinks (M2M); kept until dropped in a later migration
+  tenantId      String
   active        Boolean      @default(true)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
   practice      Practice?    @relation(fields: [practiceId], references: [id])
+  tenant        Tenant       @relation(fields: [tenantId], references: [id])
   patients      Patient[]
+  practiceLinks PracticeFacility[]
 
+  @@index([tenantId])
   @@map("facilities")
 }
 
@@ -107,15 +132,38 @@ model Practice {
   address      String?
   phone        String?
   email        String?
+  tenantId     String
   active       Boolean                @default(true)
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
 
-  facilities   Facility[]
-  providers    ProviderPractice[]
-  serviceTypes PracticeServiceType[]
+  tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  facilities    Facility[]
+  facilityLinks PracticeFacility[]
+  providers     ProviderPractice[]
+  serviceTypes  PracticeServiceType[]
+  visits        Visit[]
 
+  @@index([tenantId])
   @@map("practices")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRACTICE <-> FACILITY — many-to-many (replaces Facility.practiceId; that
+// single FK stays alongside this join until dropped in a later migration)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PracticeFacility {
+  id         String   @id @default(uuid())
+  practiceId String
+  facilityId String
+  active     Boolean  @default(true)
+
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, facilityId])
+  @@map("practice_facilities")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -155,8 +203,8 @@ model PracticeServiceType {
 
 model User {
   id                  String    @id @default(uuid())
-  username            String    @unique // used for login
-  email               String?   // optional, NOT unique
+  username            String    // no longer the login key; kept for display/legacy — see email
+  email               String    @unique // login identifier
   firstName           String
   lastName            String
   credentials         String?   // e.g. DPM — providers only
@@ -171,15 +219,18 @@ model User {
   specialty           String?
   address             String?
   phone               String?
+  tenantId            String
   active              Boolean   @default(true)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
+  tenant              Tenant       @relation(fields: [tenantId], references: [id])
   visits              Visit[]
   sessionLogs         SessionLog[]
   patientUploads      PatientUpload[]
   practices           ProviderPractice[]
 
+  @@index([tenantId])
   @@map("users")
 }
 
@@ -210,6 +261,7 @@ model SessionLog {
 model Patient {
   id           String       @id @default(uuid())
   facilityId   String
+  tenantId     String
   pccPatientId String?      @unique // PCC's internal patient ID — links to PCC DB
   firstName    String
   lastName     String
@@ -230,6 +282,7 @@ model Patient {
   updatedAt    DateTime     @updatedAt
 
   facility     Facility     @relation(fields: [facilityId], references: [id])
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
   visits       Visit[]
   coverages    PatientCoverage[]
   diagnoses    PatientDiagnosis[]
@@ -247,6 +300,7 @@ model Patient {
   episodesOfCare    PatientEpisodeOfCare[]
   therapyTracks     PatientTherapyTrack[]
 
+  @@index([tenantId])
   @@map("patients")
 }
 
@@ -343,6 +397,8 @@ model Visit {
   id             String         @id @default(uuid())
   patientId      String
   providerId     String
+  practiceId     String?        // the practice this visit was created under (session-active-practice at creation time); nullable — historical visits may not resolve one
+  tenantId       String
   visitDate      DateTime
   visitType      VisitType?
   facilityType   FacilityType   // snapshotted from patient at time of visit creation
@@ -355,6 +411,8 @@ model Visit {
 
   patient        Patient        @relation(fields: [patientId], references: [id])
   provider       User           @relation(fields: [providerId], references: [id])
+  practice       Practice?      @relation(fields: [practiceId], references: [id])
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
 
   emrImport      VisitEmrImport?
   fieldSelections VisitFieldSelection[]
@@ -364,6 +422,8 @@ model Visit {
   lastAssertedForDiagnoses   PatientDiagnosis[]  @relation("DiagnosisLastAssertedBy")
   lastAssertedForMedications PatientMedication[] @relation("MedicationLastAssertedBy")
 
+  @@index([tenantId])
+  @@index([practiceId])
   @@map("visits")
 }
 
