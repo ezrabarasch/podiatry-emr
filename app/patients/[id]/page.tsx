@@ -35,7 +35,7 @@ interface Patient {
   lastName: string
   dob: string
   facilityType: string
-  facility: { name: string }
+  facility: { name: string; practice?: { name: string } | null }
   pccPatientId: string | null
   roomNumber: string | null
   admissionDate: string | null
@@ -60,6 +60,7 @@ interface Visit {
   id: string
   visitDate: string
   visitType: string | null
+  careflowType: string
   status: string
   provider: { firstName: string; lastName: string; credentials: string | null }
   note: { cptCodes: Array<{ code: string }> } | null
@@ -353,8 +354,8 @@ export default function PatientPage() {
 
   const visitColumns: Column<Visit>[] = [
     { key: 'date', label: 'Date of Service', render: v => <span className="font-medium text-text">{fmt(v.visitDate)}</span> },
-    { key: 'practice', label: 'Practice', render: () => <span className="text-text-muted">Q-Med Podiatry</span> },
-    { key: 'service', label: 'Service', render: () => <span className="text-text-muted">Podiatry</span> },
+    { key: 'practice', label: 'Practice', render: () => <span className="text-text-muted">{patient.facility.practice?.name ?? '—'}</span> },
+    { key: 'service', label: 'Service', render: v => <span className="text-text-muted">{v.careflowType ? humanizeCareflowType(v.careflowType) : '—'}</span> },
     { key: 'type', label: 'Visit Type', render: v => <span className="text-text-muted">{v.visitType ? (VISIT_TYPE[v.visitType] ?? v.visitType) : '—'}</span> },
     { key: 'provider', label: 'Provider', render: v => (
       <span className="text-text-muted">{v.provider.firstName} {v.provider.lastName}{v.provider.credentials ? `, ${v.provider.credentials}` : ''}</span>
