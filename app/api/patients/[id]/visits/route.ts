@@ -39,22 +39,32 @@ export async function POST(
   if (error) return error
 
   const { id } = await context.params
+  const b = await req.json().catch(() => ({}))
+  const careflowType = typeof b.careflowType === 'string' ? b.careflowType : ''
 
   const patient = await prisma.patient.findUnique({
     where: { id },
-    include: { facility: true },
+    include: { facility: { include: { practice: { include: { serviceTypes: true } } } } },
   })
 
   if (!patient) return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
+
+  const allowed = patient.facility.practice?.serviceTypes.map(st => st.careflowType) ?? []
+  if (allowed.length === 0) {
+    return NextResponse.json({ error: "No service type available for this patient's practice" }, { status: 400 })
+  }
+  if (!careflowType || !allowed.includes(careflowType as (typeof allowed)[number])) {
+    return NextResponse.json({ error: 'Invalid or unavailable service type' }, { status: 400 })
+  }
 
   const visit = await prisma.visit.create({
     data: {
       patientId: patient.id,
       providerId: user.id,
       visitDate: new Date(),
-      visitType: 'established',
+      visitType: null,
       facilityType: patient.facilityType,
-      careflowType: 'at_risk_podiatry',
+      careflowType: careflowType as (typeof allowed)[number],
       status: 'draft',
     },
   })

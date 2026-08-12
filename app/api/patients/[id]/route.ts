@@ -16,7 +16,9 @@ export async function GET(
     prisma.patient.findUnique({
       where: { id },
       include: {
-        facility: true,
+        // include (not select) here so every existing facility field the
+        // page reads is preserved — we're only adding the practice chain.
+        facility: { include: { practice: { include: { serviceTypes: true } } } },
         coverages: { where: { active: true }, orderBy: { isPrimary: 'desc' } },
         diagnoses: { where: { active: true }, orderBy: { syncedAt: 'desc' }, take: 1, select: { syncedAt: true } },
         visits: { orderBy: { visitDate: 'desc' }, take: 1, select: { visitDate: true, visitType: true, status: true } },
@@ -28,5 +30,7 @@ export async function GET(
 
   if (!patient) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  return NextResponse.json({ ...patient, signedVisitCount })
+  const availableServiceTypes = patient.facility.practice?.serviceTypes.map(st => st.careflowType) ?? []
+
+  return NextResponse.json({ ...patient, signedVisitCount, availableServiceTypes })
 }

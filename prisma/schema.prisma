@@ -344,7 +344,7 @@ model Visit {
   patientId      String
   providerId     String
   visitDate      DateTime
-  visitType      VisitType
+  visitType      VisitType?
   facilityType   FacilityType   // snapshotted from patient at time of visit creation
   placeOfService PlaceOfService?
   careflowType   CareflowType   @default(at_risk_podiatry)

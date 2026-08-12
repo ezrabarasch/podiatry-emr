@@ -19,7 +19,7 @@ interface Provider {
 interface Visit {
   id: string
   visitDate: string
-  visitType: string
+  visitType: string | null
   status: string
   patient: { id: string; firstName: string; lastName: string; dob: string; facility: { name: string } }
   provider: Provider
@@ -61,7 +61,7 @@ export default function VisitsPage() {
     ) },
     { key: 'facility', label: 'Facility', render: v => <span className="text-text-muted">{v.patient.facility.name}</span> },
     { key: 'visitDate', label: 'Visit Date', render: v => <span className="text-text-muted">{fmtDate(v.visitDate)}</span> },
-    { key: 'visitType', label: 'Type', render: v => <span className="text-text-muted">{VISIT_TYPE_LABELS[v.visitType] ?? v.visitType}</span> },
+    { key: 'visitType', label: 'Type', render: v => <span className="text-text-muted">{v.visitType ? (VISIT_TYPE_LABELS[v.visitType] ?? v.visitType) : '—'}</span> },
     { key: 'provider', label: 'Provider', render: v => (
       <span className="text-text-muted">{v.provider.firstName} {v.provider.lastName}{v.provider.credentials ? `, ${v.provider.credentials}` : ''}</span>
     ) },

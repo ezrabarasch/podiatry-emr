@@ -21,6 +21,9 @@ export async function POST(
   if (visit.status === 'signed') {
     return NextResponse.json({ error: 'Visit is already signed' }, { status: 400 })
   }
+  if (!visit.visitType) {
+    return NextResponse.json({ error: 'Visit type (new/established patient) must be selected before signing.' }, { status: 400 })
+  }
 
   // Assemble the note directly (shared careflow logic, no HTTP self-fetch -
   // avoids origin/protocol mismatches behind a reverse proxy).
