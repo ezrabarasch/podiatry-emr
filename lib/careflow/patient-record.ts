@@ -1,5 +1,5 @@
-import { prisma } from '@/lib/prisma'
 import type { CareflowType } from '@prisma/client'
+import type { ScopedPrismaClient } from '@/lib/scopedPrisma'
 
 interface SignedDiagnosis {
   icd10: string
@@ -26,6 +26,7 @@ interface SignedMedication {
  * per diagnosis.
  */
 export async function reconcilePatientDiagnoses(
+  prisma: ScopedPrismaClient,
   patientId: string,
   visitId: string,
   careflowType: CareflowType,
@@ -67,6 +68,7 @@ export async function reconcilePatientDiagnoses(
  * the same fact.
  */
 export async function reconcilePatientMedications(
+  prisma: ScopedPrismaClient,
   patientId: string,
   visitId: string,
   careflowType: CareflowType,

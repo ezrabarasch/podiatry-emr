@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
 import { Prisma, Role } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 
 // POST — assign an existing provider to this practice.
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
-  const { error } = await requireRole(['ADMIN'])
+  const { prisma, error } = await requireRole(['ADMIN'])
   if (error) return error
 
   const { id } = await context.params

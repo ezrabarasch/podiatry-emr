@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 import { deactivateProviderIfNoPractices } from '@/lib/providerLifecycle'
 
 // DELETE — remove a provider from this practice.
 export async function DELETE(_req: Request, context: { params: Promise<{ id: string; providerId: string }> }) {
-  const { error } = await requireRole(['ADMIN'])
+  const { prisma, error } = await requireRole(['ADMIN'])
   if (error) return error
 
   const { id, providerId } = await context.params

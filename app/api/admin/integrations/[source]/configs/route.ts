@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 import { FREQUENCIES, type Frequency } from '@/lib/integrations'
 
 // PUT — update enabled/frequency for one source's resources.
 // Body: { configs: [{ resourceName, enabled, frequency }] }
 export async function PUT(req: Request, context: { params: Promise<{ source: string }> }) {
-  const { error } = await requireRole(['ADMIN'])
+  const { prisma, error } = await requireRole(['ADMIN'])
   if (error) return error
 
   const { source } = await context.params

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { pageParams } from '@/lib/pagination'
 
@@ -24,7 +23,9 @@ export function visitFilter(searchParams: URLSearchParams): Prisma.VisitWhereInp
 }
 
 export async function GET(req: Request) {
-  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await getSessionUser()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { prisma } = session
 
   const { searchParams } = new URL(req.url)
   const where = visitFilter(searchParams)

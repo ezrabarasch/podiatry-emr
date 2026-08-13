@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { pageParams } from '@/lib/pagination'
-import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 export async function GET(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await getSessionUser()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { prisma } = session
 
   const { id } = await context.params
   const { page, limit, skip, take } = pageParams(new URL(req.url).searchParams)
@@ -36,7 +36,7 @@ export async function POST(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { user, error } = await requireRole(['PROVIDER', 'ADMIN'])
+  const { user, prisma, error } = await requireRole(['PROVIDER', 'ADMIN'])
   if (error) return error
 
   const { id } = await context.params
@@ -58,6 +58,13 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid or unavailable service type' }, { status: 400 })
   }
 
+  // tenantId is stamped here explicitly (Prisma requires it — it has no
+  // schema default, so the scoped client can't silently supply it without
+  // this object already satisfying the type checker). practiceId is
+  // deliberately NOT set here: Visit.practiceId is nullable, so the scoped
+  // client's write-path (lib/scopedPrisma.ts) fills it in from the session's
+  // activePracticeId automatically — this is the "provider's active practice
+  // finally lands on the visit" behavior the scoping layer adds.
   const visit = await prisma.visit.create({
     data: {
       patientId: patient.id,
@@ -67,7 +74,7 @@ export async function POST(
       facilityType: patient.facilityType,
       careflowType: careflowType as (typeof allowed)[number],
       status: 'draft',
-      tenantId: DEFAULT_TENANT_ID, // STOPGAP: replace with session-derived tenantId in scoping phase
+      tenantId: user.tenantId,
     },
   })
 

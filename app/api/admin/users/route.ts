@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { Prisma, Role } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
-import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 // Fields safe to return to the client (never the password hash).
 const publicSelect = {
@@ -13,7 +11,7 @@ const publicSelect = {
 } satisfies Prisma.UserSelect
 
 export async function GET() {
-  const { error } = await requireRole(['ADMIN'])
+  const { prisma, error } = await requireRole(['ADMIN'])
   if (error) return error
 
   const users = await prisma.user.findMany({
@@ -24,7 +22,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { error } = await requireRole(['ADMIN'])
+  const { user: adminUser, prisma, error } = await requireRole(['ADMIN'])
   if (error) return error
 
   const { username, email, firstName, lastName, credentials, role, password } = await req.json()
@@ -46,7 +44,7 @@ export async function POST(req: Request) {
         credentials: credentials?.trim() || null,
         role,
         password: await bcrypt.hash(password, 12),
-        tenantId: DEFAULT_TENANT_ID, // STOPGAP: replace with session-derived tenantId in scoping phase
+        tenantId: adminUser.tenantId,
       },
       select: publicSelect,
     })

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 
 export async function GET() {
-  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await getSessionUser()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { prisma } = session
 
   const facilities = await prisma.facility.findMany({
     where: { active: true },

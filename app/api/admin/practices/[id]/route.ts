@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server'
 import { CareflowType, Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 
 const trimOrNull = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
 export async function GET(_req: Request, context: { params: Promise<{ id: string }> }) {
-  const { error } = await requireRole(['ADMIN'])
+  const { prisma, error } = await requireRole(['ADMIN'])
   if (error) return error
 
   const { id } = await context.params
@@ -39,7 +38,7 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
 }
 
 export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
-  const { error } = await requireRole(['ADMIN'])
+  const { prisma, error } = await requireRole(['ADMIN'])
   if (error) return error
 
   const { id } = await context.params

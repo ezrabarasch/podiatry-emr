@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { Role, SessionAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { buildScopedClient, type ScopedPrismaClient } from '@/lib/scopedPrisma'
 
 const MAX_FAILED_ATTEMPTS = 5
 
@@ -209,29 +210,54 @@ export type SessionUser = {
   allowedPracticeIds: string[]
 }
 
-/** Returns the current, still-valid session user, or null. */
-export async function getSessionUser(): Promise<SessionUser | null> {
+// What every route actually gets back: the user, plus a Prisma client already
+// scoped to that user's tenant/practice context (lib/scopedPrisma.ts). Routes
+// must use `.prisma` here, never import the bare singleton directly — an
+// ESLint rule (eslint.config.mjs) enforces that everywhere except this file
+// (which needs the bare client for the pre-session login/audit queries below,
+// where no tenant context exists yet) and the factory itself.
+export type ScopedSession = { user: SessionUser; prisma: ScopedPrismaClient }
+
+// impersonatingTenantId isn't carried by the session/JWT yet — no route sets
+// it. Until a super-admin "act within tenant T" picker exists, this always
+// resolves to undefined, so SUPER_ADMIN always gets the full bypass, never
+// the tenant-only impersonation mode. See lib/scopedPrisma.ts's ResolvedScope.
+function toScopeContext(user: SessionUser) {
+  return {
+    tenantId: user.tenantId,
+    role: user.role,
+    activePracticeId: user.activePracticeId,
+    allowedPracticeIds: user.allowedPracticeIds,
+  }
+}
+
+/** Returns the current, still-valid session user plus their scoped Prisma client, or null. */
+export async function getSessionUser(): Promise<ScopedSession | null> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id || session.valid === false) return null
-  return session.user
+  const user = session.user
+  return { user, prisma: buildScopedClient(toScopeContext(user)) }
 }
 
 /**
- * Guard for API routes. Returns `{ user }` when allowed, or `{ error }` with a
- * ready-to-return 401/403 response.
+ * Guard for API routes. Returns `{ user, prisma }` when allowed, or `{ error }`
+ * with a ready-to-return 401/403 response.
  *
- *   const { user, error } = await requireRole(['PROVIDER', 'ADMIN'])
+ *   const { user, prisma, error } = await requireRole(['PROVIDER', 'ADMIN'])
  *   if (error) return error
  */
 export async function requireRole(
   roles: Role[]
-): Promise<{ user: SessionUser; error: null } | { user: null; error: NextResponse }> {
-  const user = await getSessionUser()
-  if (!user) {
-    return { user: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
+): Promise<
+  | { user: SessionUser; prisma: ScopedPrismaClient; error: null }
+  | { user: null; prisma: null; error: NextResponse }
+> {
+  const session = await getSessionUser()
+  if (!session) {
+    return { user: null, prisma: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   }
-  if (!roles.includes(user.role)) {
-    return { user: null, error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
+  if (!roles.includes(session.user.role)) {
+    return { user: null, prisma: null, error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
   }
-  return { user, error: null }
+  return { user: session.user, prisma: session.prisma, error: null }
 }

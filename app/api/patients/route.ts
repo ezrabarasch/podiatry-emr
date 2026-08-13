@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { PayerType } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { pageParams } from '@/lib/pagination'
-import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 export async function GET(req: Request) {
-  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await getSessionUser()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { prisma } = session
 
   const { searchParams } = new URL(req.url)
   const q = searchParams.get('q')?.trim() ?? ''
@@ -53,7 +53,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { error } = await requireRole(['PROVIDER', 'ADMIN'])
+  const { user, prisma, error } = await requireRole(['PROVIDER', 'ADMIN'])
   if (error) return error
 
   const body = await req.json()
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
       facilityId,
       facilityType: facility.facilityType,
       pccPatientId: pccPatientId ?? null,
-      tenantId: DEFAULT_TENANT_ID, // STOPGAP: replace with session-derived tenantId in scoping phase
+      tenantId: user.tenantId,
     },
     include: { facility: true },
   })

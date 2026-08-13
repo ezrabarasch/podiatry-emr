@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 import { reconcilePatientDiagnoses } from '@/lib/careflow/patient-record'
 import { assembleNote } from '@/app/api/visits/[id]/generate/route'
@@ -8,7 +7,7 @@ export async function POST(
   _req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { error } = await requireRole(['PROVIDER', 'ADMIN'])
+  const { prisma, error } = await requireRole(['PROVIDER', 'ADMIN'])
   if (error) return error
 
   const { id: visitId } = await context.params
@@ -27,7 +26,7 @@ export async function POST(
 
   // Assemble the note directly (shared careflow logic, no HTTP self-fetch -
   // avoids origin/protocol mismatches behind a reverse proxy).
-  const gen = await assembleNote(visitId)
+  const gen = await assembleNote(prisma, visitId)
   if (!gen) {
     return NextResponse.json({ error: 'Failed to assemble note' }, { status: 500 })
   }
@@ -77,7 +76,7 @@ export async function POST(
       typeof (d as { description?: unknown }).description === 'string'
   )
   if (signedDiagnoses.length > 0) {
-    await reconcilePatientDiagnoses(visit.patientId, visitId, visit.careflowType, signedDiagnoses)
+    await reconcilePatientDiagnoses(prisma, visit.patientId, visitId, visit.careflowType, signedDiagnoses)
   }
 
   return NextResponse.json(note)

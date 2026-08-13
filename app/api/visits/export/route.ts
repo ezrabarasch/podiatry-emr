@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 import { visitFilter } from '../route'
 
@@ -11,7 +10,7 @@ const fmtDate = (d: Date | null) => (d ? new Date(d).toISOString().slice(0, 10) 
 const csvCell = (v: string) => `"${v.replace(/"/g, '""')}"`
 
 export async function GET(req: Request) {
-  const { error } = await requireRole(['ADMIN', 'PROVIDER'])
+  const { prisma, error } = await requireRole(['ADMIN', 'PROVIDER'])
   if (error) return error
 
   const { searchParams } = new URL(req.url)

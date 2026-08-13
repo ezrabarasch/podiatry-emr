@@ -1,6 +1,18 @@
-import { Prisma, PrismaClient, Role } from '@prisma/client'
+import { Role } from '@prisma/client'
 
-type Db = PrismaClient | Prisma.TransactionClient
+// Structural, not nominal: both the bare PrismaClient's $transaction callback
+// and the scoped (extended) client's $transaction callback satisfy this —
+// the extended client's transaction type isn't nominally assignable to
+// Prisma.TransactionClient, but every caller here only ever needs these 3
+// calls, so typing against exactly that avoids fighting the extension's
+// generated types for no benefit.
+type Db = {
+  providerPractice: { count(args: { where: { userId: string } }): Promise<number> }
+  user: {
+    findUnique(args: { where: { id: string }; select: { role: true } }): Promise<{ role: Role } | null>
+    update(args: { where: { id: string }; data: { active: boolean } }): Promise<unknown>
+  }
+}
 
 // A PROVIDER with zero ProviderPractice rows is deactivated — call this after
 // removing a provider's practice assignment(s), inside the same transaction as

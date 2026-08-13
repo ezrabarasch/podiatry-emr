@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
-import { prisma } from '@/lib/prisma'
 import { getSessionUser, requireRole } from '@/lib/auth'
 
 const UPLOADS_ROOT = process.env.UPLOADS_DIR ?? '/opt/podiatry-emr/uploads'
@@ -11,7 +10,9 @@ export async function GET(
   req: Request,
   context: { params: Promise<{ id: string; uploadId: string }> }
 ) {
-  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await getSessionUser()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { prisma } = session
 
   const { id, uploadId } = await context.params
   const upload = await prisma.patientUpload.findFirst({ where: { id: uploadId, patientId: id } })
@@ -36,7 +37,7 @@ export async function DELETE(
   req: Request,
   context: { params: Promise<{ id: string; uploadId: string }> }
 ) {
-  const { error } = await requireRole(['PROVIDER', 'ADMIN'])
+  const { prisma, error } = await requireRole(['PROVIDER', 'ADMIN'])
   if (error) return error
 
   const { id, uploadId } = await context.params

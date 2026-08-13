@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
+import type { ScopedPrismaClient } from '@/lib/scopedPrisma'
 import { formatMedicationList } from '@/lib/medications'
 import { loadCodeDescriptions } from '@/lib/careflow/codes'
 import { isBlockedByCondition } from '@/lib/careflow/conditions'
@@ -19,7 +19,7 @@ function classRank(cls: string): number {
 // GET handler and the sign route share one source of truth for careflow logic.
 // Returns the note payload object, or null if the visit doesn't exist.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function assembleNote(visitId: string) {
+export async function assembleNote(prisma: ScopedPrismaClient, visitId: string) {
   const visit = await prisma.visit.findUnique({
     where: { id: visitId },
     include: {
@@ -49,7 +49,7 @@ export async function assembleNote(visitId: string) {
   }
 
   const careflowType = visit.careflowType
-  const { icd10: ICD10_DESCRIPTIONS, cpt: CPT_DESCRIPTIONS } = await loadCodeDescriptions()
+  const { icd10: ICD10_DESCRIPTIONS, cpt: CPT_DESCRIPTIONS } = await loadCodeDescriptions(prisma)
 
   // ── Condition context (drives any named dxCondition gates) ─────────────────
   const medHistory = (visit.emrImport?.medicalHistory ?? []) as Array<{ icd10?: string }>
@@ -210,10 +210,11 @@ export async function GET(
   _req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await getSessionUser()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id: visitId } = await context.params
-  const payload = await assembleNote(visitId)
+  const payload = await assembleNote(session.prisma, visitId)
   if (!payload) return NextResponse.json({ error: 'Visit not found' }, { status: 404 })
   return NextResponse.json(payload)
 }

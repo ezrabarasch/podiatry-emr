@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
 import { Prisma, CareflowType } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 import { pageParams } from '@/lib/pagination'
 
 export async function GET(req: Request) {
-  const { error } = await requireRole(['ADMIN'])
+  const { prisma, error } = await requireRole(['ADMIN'])
   if (error) return error
 
   const { searchParams } = new URL(req.url)
