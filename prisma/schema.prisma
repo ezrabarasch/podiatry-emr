@@ -141,6 +141,7 @@ model Practice {
   facilities    Facility[]
   facilityLinks PracticeFacility[]
   providers     ProviderPractice[]
+  staffMembers  StaffPractice[]
   serviceTypes  PracticeServiceType[]
   visits        Visit[]
 
@@ -180,6 +181,23 @@ model ProviderPractice {
 
   @@unique([userId, practiceId])
   @@map("provider_practices")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OFFICE/ADMIN STAFF <-> PRACTICE — many-to-many, kept separate from
+// ProviderPractice on purpose (providers grow provider-specific fields later)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model StaffPractice {
+  id         String   @id @default(uuid())
+  userId     String
+  practiceId String
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, practiceId])
+  @@map("staff_practices")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,6 +247,7 @@ model User {
   sessionLogs         SessionLog[]
   patientUploads      PatientUpload[]
   practices           ProviderPractice[]
+  staffPractices      StaffPractice[]
 
   @@index([tenantId])
   @@map("users")

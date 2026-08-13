@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { Prisma, Role } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
+import { deactivateProviderIfNoPractices } from '@/lib/providerLifecycle'
 
 const trimOrNull = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
@@ -85,6 +86,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
         }
         if (toRemove.length) {
           await tx.providerPractice.deleteMany({ where: { userId: id, practiceId: { in: toRemove } } })
+          await deactivateProviderIfNoPractices(tx, id)
         }
       }
 
