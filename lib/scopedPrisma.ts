@@ -27,6 +27,11 @@ export type ScopeContext = {
   // in the app sets this yet (see lib/auth.ts's toScopeContext). Until it
   // does, SUPER_ADMIN always resolves to full bypass, never tenant-only.
   impersonatingTenantId?: string | null
+  // Tenant-level administrator (company owner) vs. a practice-scoped ADMIN.
+  // Carried here so resolveScope() CAN branch on it — deliberately not used
+  // yet; that rework is a separate, later change. See prisma/schema.prisma's
+  // User.isTenantAdmin for the full rationale.
+  isTenantAdmin: boolean
 }
 
 // The 5 models with a direct tenantId column.

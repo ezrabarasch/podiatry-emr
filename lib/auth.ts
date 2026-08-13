@@ -119,6 +119,7 @@ export const authOptions: AuthOptions = {
           tenantId: user.tenantId,
           allowedPracticeIds,
           activePracticeId,
+          isTenantAdmin: user.isTenantAdmin,
         }
       },
     }),
@@ -139,6 +140,7 @@ export const authOptions: AuthOptions = {
         token.tenantId = user.tenantId
         token.allowedPracticeIds = user.allowedPracticeIds
         token.activePracticeId = user.activePracticeId
+        token.isTenantAdmin = user.isTenantAdmin
       }
 
       // Mid-session practice switch (the select-practice page today; the 3c
@@ -161,6 +163,7 @@ export const authOptions: AuthOptions = {
       session.user.tenantId = token.tenantId
       session.user.activePracticeId = token.activePracticeId ?? null
       session.user.allowedPracticeIds = token.allowedPracticeIds ?? []
+      session.user.isTenantAdmin = token.isTenantAdmin ?? false
 
       // Single-device enforcement: the session is only valid while its token
       // still matches the user's current token and the account is usable.
@@ -208,6 +211,7 @@ export type SessionUser = {
   tenantId: string
   activePracticeId: string | null
   allowedPracticeIds: string[]
+  isTenantAdmin: boolean
 }
 
 // What every route actually gets back: the user, plus a Prisma client already
@@ -222,12 +226,16 @@ export type ScopedSession = { user: SessionUser; prisma: ScopedPrismaClient }
 // it. Until a super-admin "act within tenant T" picker exists, this always
 // resolves to undefined, so SUPER_ADMIN always gets the full bypass, never
 // the tenant-only impersonation mode. See lib/scopedPrisma.ts's ResolvedScope.
+//
+// isTenantAdmin is threaded through here so it's available in ScopeContext,
+// but resolveScope() doesn't branch on it yet — that's the next brief.
 function toScopeContext(user: SessionUser) {
   return {
     tenantId: user.tenantId,
     role: user.role,
     activePracticeId: user.activePracticeId,
     allowedPracticeIds: user.allowedPracticeIds,
+    isTenantAdmin: user.isTenantAdmin,
   }
 }
 

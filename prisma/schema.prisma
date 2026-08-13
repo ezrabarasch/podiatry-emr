@@ -238,6 +238,12 @@ model User {
   address             String?
   phone               String?
   tenantId            String
+  // Tenant-level administrator (company owner) — sees every practice in the
+  // tenant and is auto-added to new ones, as opposed to a practice-scoped
+  // ADMIN whose visibility is limited to their assigned practices. Keyed off
+  // this flag, not the ADMIN role broadly — the role only gates admin-surface
+  // access; this flag is what the scoping layer branches on.
+  isTenantAdmin       Boolean   @default(false)
   active              Boolean   @default(true)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt

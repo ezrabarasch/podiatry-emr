@@ -15,6 +15,7 @@ declare module 'next-auth' {
       tenantId: string
       activePracticeId: string | null // provider's chosen practice; always null for office/admin
       allowedPracticeIds: string[] // ProviderPractice (providers) or StaffPractice (office/admin) membership
+      isTenantAdmin: boolean // tenant-level administrator vs. a practice-scoped ADMIN
     }
   }
 
@@ -28,6 +29,7 @@ declare module 'next-auth' {
     tenantId: string
     activePracticeId: string | null
     allowedPracticeIds: string[]
+    isTenantAdmin: boolean
   }
 }
 
@@ -41,5 +43,6 @@ declare module 'next-auth/jwt' {
     tenantId: string
     activePracticeId: string | null
     allowedPracticeIds: string[]
+    isTenantAdmin: boolean
   }
 }
