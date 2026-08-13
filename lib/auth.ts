@@ -90,6 +90,24 @@ export const authOptions: AuthOptions = {
         })
         await logSession({ userId: user.id, username: email, ipAddress, userAgent, action: SessionAction.LOGIN })
 
+        // Allowed-practice-set is role-branched: providers via ProviderPractice,
+        // office/admin via StaffPractice. SUPER_ADMIN (and anything else) gets
+        // an empty set here — cross-tenant behavior is a later phase.
+        const memberships =
+          user.role === Role.PROVIDER
+            ? await prisma.providerPractice.findMany({ where: { userId: user.id }, select: { practiceId: true } })
+            : user.role === Role.OFFICE || user.role === Role.ADMIN
+              ? await prisma.staffPractice.findMany({ where: { userId: user.id }, select: { practiceId: true } })
+              : []
+        const allowedPracticeIds = memberships.map(m => m.practiceId)
+
+        // Only providers have a single "active" practice, and only when there's
+        // no ambiguity — exactly one membership auto-selects it; 2+ (or 0, which
+        // shouldn't happen for an active provider per the 3a lifecycle rule, but
+        // isn't assumed here) leaves it null for the select-practice gate.
+        const activePracticeId =
+          user.role === Role.PROVIDER && allowedPracticeIds.length === 1 ? allowedPracticeIds[0] : null
+
         return {
           id: user.id,
           username: user.username,
@@ -97,6 +115,9 @@ export const authOptions: AuthOptions = {
           credentials: user.credentials ?? '',
           role: user.role,
           sessionToken,
+          tenantId: user.tenantId,
+          allowedPracticeIds,
+          activePracticeId,
         }
       },
     }),
@@ -107,14 +128,27 @@ export const authOptions: AuthOptions = {
     updateAge: 5 * 60, // refresh rolling expiry at most every 5 min
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id
         token.username = user.username
         token.credentials = user.credentials
         token.role = user.role
         token.sessionToken = user.sessionToken
+        token.tenantId = user.tenantId
+        token.allowedPracticeIds = user.allowedPracticeIds
+        token.activePracticeId = user.activePracticeId
       }
+
+      // Mid-session practice switch (the select-practice page today; the 3c
+      // switcher reuses this exact branch). Never trust the client blindly —
+      // the requested id must already be in this token's own allowed set.
+      if (trigger === 'update' && session?.activePracticeId !== undefined) {
+        if (Array.isArray(token.allowedPracticeIds) && token.allowedPracticeIds.includes(session.activePracticeId)) {
+          token.activePracticeId = session.activePracticeId
+        }
+      }
+
       return token
     },
     async session({ session, token }) {
@@ -123,6 +157,9 @@ export const authOptions: AuthOptions = {
       session.user.name = token.name ?? ''
       session.user.credentials = token.credentials
       session.user.role = token.role
+      session.user.tenantId = token.tenantId
+      session.user.activePracticeId = token.activePracticeId ?? null
+      session.user.allowedPracticeIds = token.allowedPracticeIds ?? []
 
       // Single-device enforcement: the session is only valid while its token
       // still matches the user's current token and the account is usable.
@@ -167,6 +204,9 @@ export type SessionUser = {
   name: string
   credentials: string
   role: Role
+  tenantId: string
+  activePracticeId: string | null
+  allowedPracticeIds: string[]
 }
 
 /** Returns the current, still-valid session user, or null. */

@@ -12,6 +12,9 @@ declare module 'next-auth' {
       name: string
       credentials: string
       role: Role
+      tenantId: string
+      activePracticeId: string | null // provider's chosen practice; always null for office/admin
+      allowedPracticeIds: string[] // ProviderPractice (providers) or StaffPractice (office/admin) membership
     }
   }
 
@@ -22,6 +25,9 @@ declare module 'next-auth' {
     credentials: string
     role: Role
     sessionToken: string
+    tenantId: string
+    activePracticeId: string | null
+    allowedPracticeIds: string[]
   }
 }
 
@@ -32,5 +38,8 @@ declare module 'next-auth/jwt' {
     credentials: string
     role: Role
     sessionToken: string
+    tenantId: string
+    activePracticeId: string | null
+    allowedPracticeIds: string[]
   }
 }

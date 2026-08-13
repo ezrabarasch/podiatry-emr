@@ -15,12 +15,19 @@ export default function PageShell({
   children: ReactNode
   breadcrumb?: Crumb[]
 }) {
-  const { status } = useSession()
+  const { data: session, status } = useSession()
   const router = useRouter()
 
   useEffect(() => {
     if (status === 'unauthenticated') router.replace('/login')
-  }, [status, router])
+    else if (
+      session?.user?.role === 'PROVIDER' &&
+      session.user.activePracticeId == null &&
+      (session.user.allowedPracticeIds?.length ?? 0) > 1
+    ) {
+      router.replace('/select-practice')
+    }
+  }, [session, status, router])
 
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
