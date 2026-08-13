@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { pageParams } from '@/lib/pagination'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 export async function GET(
   req: Request,
@@ -66,6 +67,7 @@ export async function POST(
       facilityType: patient.facilityType,
       careflowType: careflowType as (typeof allowed)[number],
       status: 'draft',
+      tenantId: DEFAULT_TENANT_ID, // STOPGAP: replace with session-derived tenantId in scoping phase
     },
   })
 

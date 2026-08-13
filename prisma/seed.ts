@@ -1,6 +1,7 @@
 import { PrismaClient, CareflowType, CodeSystem } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { PCC_RESOURCES, FREQUENCIES } from '../lib/integrations'
+import { DEFAULT_TENANT_ID } from '../lib/tenant'
 
 const prisma = new PrismaClient()
 
@@ -12,26 +13,39 @@ async function main() {
   console.log('🌱 Seeding database...')
 
   // ─────────────────────────────────────────────────────────────────────────
+  // TENANT — the only tenant until the scoping phase adds real provisioning.
+  // Must be created before anything that references it below.
+  // ─────────────────────────────────────────────────────────────────────────
+  await prisma.tenant.upsert({
+    where: { id: DEFAULT_TENANT_ID },
+    update: {},
+    create: { id: DEFAULT_TENANT_ID, name: 'Tenant #1' },
+  })
+  console.log('✓ Tenant #1 seeded')
+
+  // ─────────────────────────────────────────────────────────────────────────
   // USERS — one per role for testing
   // ─────────────────────────────────────────────────────────────────────────
   const seedUsers = [
-    { username: 'admin', password: 'admin123', firstName: 'Admin', lastName: 'User', role: 'ADMIN' as const, credentials: null },
-    { username: 'provider', password: 'provider123', firstName: 'Provider', lastName: 'User', role: 'PROVIDER' as const, credentials: 'DPM' },
-    { username: 'office', password: 'office123', firstName: 'Office', lastName: 'User', role: 'OFFICE' as const, credentials: null },
+    { username: 'admin', email: 'admin@podiatry-emr.test', password: 'admin123', firstName: 'Admin', lastName: 'User', role: 'ADMIN' as const, credentials: null },
+    { username: 'provider', email: 'provider@podiatry-emr.test', password: 'provider123', firstName: 'Provider', lastName: 'User', role: 'PROVIDER' as const, credentials: 'DPM' },
+    { username: 'office', email: 'office@podiatry-emr.test', password: 'office123', firstName: 'Office', lastName: 'User', role: 'OFFICE' as const, credentials: null },
   ]
 
   for (const u of seedUsers) {
     const password = await bcrypt.hash(u.password, 12)
     await prisma.user.upsert({
-      where: { username: u.username },
+      where: { email: u.email },
       update: {},
       create: {
         username: u.username,
+        email: u.email,
         firstName: u.firstName,
         lastName: u.lastName,
         credentials: u.credentials,
         role: u.role,
         password,
+        tenantId: DEFAULT_TENANT_ID,
       },
     })
   }
@@ -400,6 +414,7 @@ async function main() {
       facilityType: 'SNF',
       address: '123 Main Street, Brooklyn, NY 11201',
       npi: '1234567890',
+      tenantId: DEFAULT_TENANT_ID,
     },
   })
 
@@ -413,6 +428,7 @@ async function main() {
       facilityId: facility.id,
       facilityType: 'SNF',
       pccPatientId: 'test-pcc-001',
+      tenantId: DEFAULT_TENANT_ID,
     },
   })
   console.log('✓ Test facility + patient seeded')

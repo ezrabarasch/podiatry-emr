@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { CareflowType, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 const trimOrNull = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
@@ -52,6 +53,7 @@ export async function POST(req: Request) {
           address: trimOrNull(b.address),
           phone: trimOrNull(b.phone),
           email: trimOrNull(b.email),
+          tenantId: DEFAULT_TENANT_ID, // STOPGAP: replace with session-derived tenantId in scoping phase
           ...(b.active !== undefined ? { active: !!b.active } : {}),
         },
       })

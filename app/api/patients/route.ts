@@ -3,6 +3,7 @@ import { PayerType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { pageParams } from '@/lib/pagination'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 export async function GET(req: Request) {
   if (!(await getSessionUser())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -69,6 +70,7 @@ export async function POST(req: Request) {
       facilityId,
       facilityType: facility.facilityType,
       pccPatientId: pccPatientId ?? null,
+      tenantId: DEFAULT_TENANT_ID, // STOPGAP: replace with session-derived tenantId in scoping phase
     },
     include: { facility: true },
   })

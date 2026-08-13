@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { FacilityType, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 const trimOrNull = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
         name: b.name.trim(),
         facilityType: b.facilityType,
         practiceId: b.practiceId.trim(),
+        tenantId: DEFAULT_TENANT_ID, // STOPGAP: replace with session-derived tenantId in scoping phase
         address: trimOrNull(b.address),
         npi: trimOrNull(b.npi),
         posCode: trimOrNull(b.posCode),

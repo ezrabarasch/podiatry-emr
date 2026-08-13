@@ -36,7 +36,10 @@ export async function PUT(
   const data: Prisma.UserUpdateInput = {}
   if (body.firstName !== undefined) data.firstName = body.firstName.trim()
   if (body.lastName !== undefined) data.lastName = body.lastName.trim()
-  if (body.email !== undefined) data.email = body.email?.trim() || null
+  if (body.email !== undefined) {
+    if (!body.email?.trim()) return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+    data.email = body.email.trim()
+  }
   if (body.credentials !== undefined) data.credentials = body.credentials?.trim() || null
   if (body.active !== undefined) data.active = !!body.active
   if (body.role !== undefined) {

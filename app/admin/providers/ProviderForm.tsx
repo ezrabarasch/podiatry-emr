@@ -97,7 +97,7 @@ export default function ProviderForm({
         </div>
       </div>
       <div>
-        <label className={labelCls}>Email <span className="text-slate-400">(optional)</span></label>
+        <label className={labelCls}>Email <span className="text-red-500">*</span></label>
         <input className={inputCls} type="email" value={form.email} onChange={set('email')} />
       </div>
       <div className="grid grid-cols-3 gap-4">

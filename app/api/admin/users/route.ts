@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { Prisma, Role } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 // Fields safe to return to the client (never the password hash).
 const publicSelect = {
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
 
   const { username, email, firstName, lastName, credentials, role, password } = await req.json()
 
-  if (!username || !firstName || !lastName || !role || !password) {
+  if (!username || !email?.trim() || !firstName || !lastName || !role || !password) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
   if (!Object.values(Role).includes(role)) {
@@ -39,19 +40,20 @@ export async function POST(req: Request) {
     const user = await prisma.user.create({
       data: {
         username: username.trim(),
-        email: email?.trim() || null,
+        email: email.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         credentials: credentials?.trim() || null,
         role,
         password: await bcrypt.hash(password, 12),
+        tenantId: DEFAULT_TENANT_ID, // STOPGAP: replace with session-derived tenantId in scoping phase
       },
       select: publicSelect,
     })
     return NextResponse.json(user)
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-      return NextResponse.json({ error: 'Username already taken' }, { status: 409 })
+      return NextResponse.json({ error: 'Email already taken' }, { status: 409 })
     }
     throw e
   }

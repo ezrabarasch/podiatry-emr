@@ -29,29 +29,31 @@ export const authOptions: AuthOptions = {
     CredentialsProvider({
       name: 'credentials',
       credentials: {
-        username: { label: 'Username', type: 'text' },
+        email: { label: 'Email', type: 'text' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials, req) {
-        const username = credentials?.username?.trim()
+        const email = credentials?.email?.trim()
         const password = credentials?.password
         const headers = (req?.headers ?? {}) as Record<string, string>
         const ipAddress = (headers['x-forwarded-for']?.split(',')[0].trim()) || null
         const userAgent = headers['user-agent'] || null
 
-        if (!username || !password) return null
+        if (!email || !password) return null
 
-        const user = await prisma.user.findUnique({ where: { username } })
+        const user = await prisma.user.findUnique({ where: { email } })
 
-        // Unknown username or deactivated account — generic failure.
+        // Unknown email or deactivated account — generic failure. logSession's
+        // `username` param is the audit trail's login-identifier column; it now
+        // holds the email the login was attempted with (column name unchanged).
         if (!user || !user.active) {
-          await logSession({ userId: user?.id ?? null, username, ipAddress, userAgent, action: SessionAction.FAILED })
+          await logSession({ userId: user?.id ?? null, username: email, ipAddress, userAgent, action: SessionAction.FAILED })
           return null
         }
 
         // Already locked — stays locked until an admin unlocks.
         if (user.lockedAt) {
-          await logSession({ userId: user.id, username, ipAddress, userAgent, action: SessionAction.FAILED })
+          await logSession({ userId: user.id, username: email, ipAddress, userAgent, action: SessionAction.FAILED })
           throw new Error('Account is locked. Contact an administrator.')
         }
 
@@ -64,14 +66,14 @@ export const authOptions: AuthOptions = {
               where: { id: user.id },
               data: { failedLoginAttempts: attempts, lockedAt: new Date() },
             })
-            await logSession({ userId: user.id, username, ipAddress, userAgent, action: SessionAction.LOCKED })
+            await logSession({ userId: user.id, username: email, ipAddress, userAgent, action: SessionAction.LOCKED })
             throw new Error('Account is locked. Contact an administrator.')
           }
           await prisma.user.update({
             where: { id: user.id },
             data: { failedLoginAttempts: attempts },
           })
-          await logSession({ userId: user.id, username, ipAddress, userAgent, action: SessionAction.FAILED })
+          await logSession({ userId: user.id, username: email, ipAddress, userAgent, action: SessionAction.FAILED })
           return null
         }
 
@@ -86,7 +88,7 @@ export const authOptions: AuthOptions = {
             currentSessionToken: sessionToken,
           },
         })
-        await logSession({ userId: user.id, username, ipAddress, userAgent, action: SessionAction.LOGIN })
+        await logSession({ userId: user.id, username: email, ipAddress, userAgent, action: SessionAction.LOGIN })
 
         return {
           id: user.id,

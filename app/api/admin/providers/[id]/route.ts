@@ -51,7 +51,10 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   const data: Prisma.UserUpdateInput = {}
   if (b.firstName !== undefined) data.firstName = b.firstName.trim()
   if (b.lastName !== undefined) data.lastName = b.lastName.trim()
-  if (b.email !== undefined) data.email = trimOrNull(b.email)
+  if (b.email !== undefined) {
+    if (!b.email?.trim()) return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+    data.email = b.email.trim()
+  }
   if (b.credentials !== undefined) data.credentials = trimOrNull(b.credentials)
   if (b.npi !== undefined) data.npi = trimOrNull(b.npi)
   if (b.licenseNumber !== undefined) data.licenseNumber = trimOrNull(b.licenseNumber)
@@ -91,7 +94,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
       if (e.code === 'P2025') return NextResponse.json({ error: 'Provider not found' }, { status: 404 })
-      if (e.code === 'P2002') return NextResponse.json({ error: 'Username already taken' }, { status: 409 })
+      if (e.code === 'P2002') return NextResponse.json({ error: 'Email already taken' }, { status: 409 })
       if (e.code === 'P2003') return NextResponse.json({ error: 'Invalid practice' }, { status: 400 })
     }
     throw e

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { Prisma, Role } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 const trimOrNull = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
@@ -36,8 +37,8 @@ export async function POST(req: Request) {
   if (error) return error
 
   const b = await req.json()
-  const { username, firstName, lastName, password } = b
-  if (!username || !firstName || !lastName || !password) {
+  const { username, firstName, lastName, password, email } = b
+  if (!username || !firstName || !lastName || !password || !email?.trim()) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
       const created = await tx.user.create({
         data: {
           username: username.trim(),
-          email: trimOrNull(b.email),
+          email: email.trim(),
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           credentials: trimOrNull(b.credentials),
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
           specialty: trimOrNull(b.specialty),
           address: trimOrNull(b.address),
           phone: trimOrNull(b.phone),
+          tenantId: DEFAULT_TENANT_ID, // STOPGAP: replace with session-derived tenantId in scoping phase
           ...(b.active !== undefined ? { active: !!b.active } : {}),
         },
         select: publicSelect,
@@ -73,7 +75,7 @@ export async function POST(req: Request) {
     return NextResponse.json(provider)
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
-      if (e.code === 'P2002') return NextResponse.json({ error: 'Username already taken' }, { status: 409 })
+      if (e.code === 'P2002') return NextResponse.json({ error: 'Email already taken' }, { status: 409 })
       if (e.code === 'P2003') return NextResponse.json({ error: 'Invalid practice' }, { status: 400 })
     }
     throw e
