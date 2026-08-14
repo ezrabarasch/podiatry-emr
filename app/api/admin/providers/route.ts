@@ -42,6 +42,19 @@ export async function POST(req: Request) {
 
   const practiceIds = (Array.isArray(b.practiceIds) ? [...new Set(b.practiceIds)] : []) as string[]
 
+  // Validate every submitted practiceId is within the caller's own scope
+  // BEFORE touching anything — Practice is a scoped model, so this lookup
+  // only ever returns practices in the caller's tenant (and, for a non-
+  // tenant-admin, their own practice scope). A submitted id that isn't
+  // returned is either foreign or nonexistent; reject before creating the
+  // user at all, so neither the user nor the join can be partially written.
+  if (practiceIds.length) {
+    const found = await prisma.practice.findMany({ where: { id: { in: practiceIds } }, select: { id: true } })
+    if (found.length !== practiceIds.length) {
+      return NextResponse.json({ error: 'One or more practices are invalid or not in your scope' }, { status: 400 })
+    }
+  }
+
   try {
     const provider = await prisma.$transaction(async tx => {
       const created = await tx.user.create({

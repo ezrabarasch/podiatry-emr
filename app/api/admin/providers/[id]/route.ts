@@ -66,8 +66,26 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   if (b.password) data.password = await bcrypt.hash(b.password, 12)
 
   let practiceIds: string[] | undefined
+  let toAdd: string[] = []
+  let toRemove: string[] = []
   if (b.practiceIds !== undefined) {
     practiceIds = (Array.isArray(b.practiceIds) ? [...new Set(b.practiceIds)] : []) as string[]
+    const current = await prisma.providerPractice.findMany({ where: { userId: id } })
+    const currentIds = current.map(pp => pp.practiceId)
+    toAdd = practiceIds.filter(pid => !currentIds.includes(pid))
+    toRemove = currentIds.filter(pid => !practiceIds!.includes(pid))
+
+    // Validate only the NEW ids (toAdd) against the caller's scope, the same
+    // way the create route does — toRemove only removes rows the provider
+    // already has, so it needs no check. Done before entering the
+    // transaction so an invalid id rejects with a clean 400 and blocks both
+    // the user update and the join write, with nothing partially committed.
+    if (toAdd.length) {
+      const found = await prisma.practice.findMany({ where: { id: { in: toAdd } }, select: { id: true } })
+      if (found.length !== toAdd.length) {
+        return NextResponse.json({ error: 'One or more practices are invalid or not in your scope' }, { status: 400 })
+      }
+    }
   }
 
   try {
@@ -75,11 +93,6 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       const updated = await tx.user.update({ where: { id }, data, select: publicSelect })
 
       if (practiceIds) {
-        const current = await tx.providerPractice.findMany({ where: { userId: id } })
-        const currentIds = current.map(pp => pp.practiceId)
-        const toAdd = practiceIds.filter(pid => !currentIds.includes(pid))
-        const toRemove = currentIds.filter(pid => !practiceIds!.includes(pid))
-
         if (toAdd.length) {
           await tx.providerPractice.createMany({ data: toAdd.map(practiceId => ({ userId: id, practiceId })) })
         }
