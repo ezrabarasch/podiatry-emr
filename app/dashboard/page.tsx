@@ -56,10 +56,13 @@ export default function DashboardPage() {
 
   const isAdmin = session?.user?.role === 'ADMIN'
 
+  // Facility (and, via patient ancestry, payer-type) reads are practice-
+  // scoped now — re-run when the provider switches their active practice so
+  // the filter options reflect the new practice instead of the old one.
   useEffect(() => {
     fetch('/api/facilities').then(r => r.json()).then(facs => setFacilities(Array.isArray(facs) ? facs : []))
     fetch('/api/coverages/payer-types').then(r => r.json()).then(pts => setPayerOptions(Array.isArray(pts) ? pts : []))
-  }, [])
+  }, [session?.user?.activePracticeId])
 
   // Fetch the current page whenever filters or the page change (debounced for typing).
   useEffect(() => {
@@ -78,7 +81,7 @@ export default function DashboardPage() {
       })
     }, 250)
     return () => clearTimeout(t)
-  }, [page, limit, search, facilityId, payerType, showInactive])
+  }, [page, limit, search, facilityId, payerType, showInactive, session?.user?.activePracticeId])
 
   // Changing any filter resets to page 1.
   const onFilter = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setPage(1) }

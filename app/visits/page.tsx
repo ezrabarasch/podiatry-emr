@@ -48,6 +48,13 @@ export default function VisitsPage() {
   if (providerId) filters.set('providerId', providerId)
   if (from) filters.set('from', from)
   if (to) filters.set('to', to)
+  // Not read by the API — visits are already re-scoped server-side from the
+  // session cookie. This only exists so the URL string (a usePaged dependency)
+  // changes when the provider switches their active practice, triggering a
+  // re-fetch. usePaged's own `key` can't carry this instead: it doubles as
+  // the response property name it reads (`data.visits`), so repurposing it
+  // would break that lookup.
+  if (session?.user?.activePracticeId) filters.set('_activePractice', session.user.activePracticeId)
 
   const paged = usePaged<Visit>(`/api/visits?${filters}`, 'visits')
   const providers = (paged.data?.providers ?? []) as Provider[]

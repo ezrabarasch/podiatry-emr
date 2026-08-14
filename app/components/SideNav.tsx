@@ -1,7 +1,10 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { useRouter, usePathname } from 'next/navigation'
+
+interface Practice { id: string; name: string }
 
 type Item = { label: string; href: string; match: (p: string) => boolean }
 
@@ -24,10 +27,39 @@ const initials = (name?: string | null) =>
   (name ?? '').split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?'
 
 export default function SideNav() {
-  const { data: session } = useSession()
+  const { data: session, update } = useSession()
   const router = useRouter()
   const pathname = usePathname()
   const user = session?.user
+
+  // Only a PROVIDER with 2+ allowed practices has anything to switch — a
+  // single-practice provider has nothing to pick between, and office/admin
+  // work across their whole allowed set at once rather than one "active"
+  // practice at a time. Gates both the fetch below and the render.
+  const showSwitcher = user?.role === 'PROVIDER' && (user.allowedPracticeIds?.length ?? 0) >= 2
+
+  const [practices, setPractices] = useState<Practice[]>([])
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [switching, setSwitching] = useState(false)
+
+  useEffect(() => {
+    if (!showSwitcher) return
+    fetch('/api/me/practices').then(r => r.json()).then(data => setPractices(Array.isArray(data) ? data : []))
+  }, [showSwitcher])
+
+  const activePractice = practices.find(p => p.id === user?.activePracticeId)
+
+  // Mirrors /select-practice's own interaction (same update() call, same
+  // 3b-built jwt trigger:'update' mechanism) — just from a persistent
+  // dropdown instead of a full-page picker, and without navigating away:
+  // the dashboard/visits pages react to the session change themselves.
+  const switchPractice = async (practiceId: string) => {
+    if (practiceId === user?.activePracticeId) { setSwitcherOpen(false); return }
+    setSwitching(true)
+    await update({ activePracticeId: practiceId })
+    setSwitching(false)
+    setSwitcherOpen(false)
+  }
 
   const renderSection = (label: string, items: Item[]) => (
     <div className="space-y-1">
@@ -81,6 +113,41 @@ export default function SideNav() {
             </div>
           </div>
         )}
+
+        {showSwitcher && (
+          <div className="relative mb-2">
+            <button
+              onClick={() => setSwitcherOpen(o => !o)}
+              disabled={switching}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md text-sm font-medium text-left text-white/70 border border-white/10 hover:bg-white/5 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="truncate">{switching ? 'Switching...' : (activePractice?.name ?? 'Select practice')}</span>
+              <span className="text-white/40 text-xs flex-shrink-0">▾</span>
+            </button>
+            {switcherOpen && (
+              <div
+                className="absolute bottom-full left-0 right-0 mb-1 rounded-md border border-white/10 overflow-hidden shadow-lg z-10"
+                style={{ background: 'var(--primary-dark)' }}
+              >
+                {practices.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => switchPractice(p.id)}
+                    disabled={switching}
+                    className={`w-full text-left px-3 py-2 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                      p.id === user?.activePracticeId
+                        ? 'bg-white/10 text-white'
+                        : 'text-white/70 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
           className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white transition-colors"
