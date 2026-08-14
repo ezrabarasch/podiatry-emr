@@ -89,10 +89,21 @@ const WRITE_OPS = new Set(['create', 'createMany', 'update', 'updateMany', 'dele
 // ─────────────────────────────────────────────────────────────────────────────
 // Resolved scope — computed once per client, not per query. Three modes:
 //   bypass            true super-admin: no filter of any kind, on anything.
-//   tenant-only        super-admin impersonating tenant T: tenant filter, no
-//                       practice filter (per spec — impersonation isn't
-//                       staffed to any particular practice).
-//   tenant-and-practice everyone else: both filters apply.
+//   tenant-only        tenant filter, NO practice filter. Two different
+//                       callers land here for two different reasons, but the
+//                       resulting filter shape is identical either way:
+//                         - a super-admin impersonating tenant T (isn't
+//                           staffed to any particular practice), or
+//                         - a TENANT ADMIN (ctx.isTenantAdmin) — the
+//                           tenant-wide owner who sees every practice in
+//                           their own tenant. "All practices in the tenant"
+//                           and "no practice narrowing, just tenantId" are
+//                           the same thing once every scoped model is
+//                           already tenant-filtered, so this mode is reused
+//                           rather than adding a 4th one for no behavioral
+//                           difference.
+//   tenant-and-practice everyone else (PROVIDER, and OFFICE/ADMIN who are
+//                       NOT tenant admins): both filters apply.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ResolvedScope =
@@ -128,6 +139,11 @@ function resolveScope(ctx: ScopeContext): ResolvedScope {
   if (ctx.role === Role.SUPER_ADMIN) {
     if (!ctx.impersonatingTenantId) return { mode: 'bypass' }
     return { mode: 'tenant-only', tenantId: ctx.impersonatingTenantId }
+  }
+  // Tenant admin (company owner): tenant-wide, no practice narrowing —
+  // same filter shape as impersonation above, see the mode comment.
+  if (ctx.isTenantAdmin) {
+    return { mode: 'tenant-only', tenantId: ctx.tenantId }
   }
   return {
     mode: 'tenant-and-practice',
@@ -191,19 +207,21 @@ function patientWhere(scope: ResolvedScope): Prisma.PatientWhereInput | null {
   }
 }
 
-// Visit.practiceId is nullable ("the practice this visit was created under...
-// nullable — historical visits may not resolve one", schema.prisma:419).
-// Those null-practiceId visits are a TENANT-WIDE VISIBLE fallback, not
-// hidden — included via the `practiceId: null` arm below, not excluded.
+// Visit.practiceId IN scope — same grain of transparency as patientWhere()
+// below: a visit is visible iff tied to an in-scope practice, exactly as a
+// patient is visible iff at an in-scope facility. No null-practiceId
+// fallback anymore: that arm existed because some historical visits had no
+// resolved practice, but the isTenantAdmin migration (Part 1) backfills
+// those 2 rows to the tenant's practice, so every Visit now has a real
+// practiceId and the fallback would only ever have masked a bug from here
+// on. ORDERING DEPENDENCY: this is only correct once that migration has
+// actually run — see the STOP-FOR-REVIEW report.
 function visitWhere(scope: ResolvedScope): Prisma.VisitWhereInput | null {
   if (scope.mode === 'bypass') return null
   if (scope.mode === 'tenant-only') return { tenantId: scope.tenantId }
   return {
     tenantId: scope.tenantId,
-    OR: [
-      { practiceId: { in: scope.practiceIds } },
-      { practiceId: null },
-    ],
+    practiceId: { in: scope.practiceIds },
   }
 }
 
