@@ -6,7 +6,7 @@ import { requireRole } from '@/lib/auth'
 const publicSelect = {
   id: true, username: true, email: true, firstName: true, lastName: true,
   credentials: true, role: true, active: true, lockedAt: true, lastLoginAt: true,
-  createdAt: true,
+  createdAt: true, isTenantAdmin: true,
 } satisfies Prisma.UserSelect
 
 export async function GET(
@@ -26,7 +26,7 @@ export async function PUT(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { prisma, error } = await requireRole(['ADMIN'])
+  const { user: caller, prisma, error } = await requireRole(['ADMIN'])
   if (error) return error
 
   const { id } = await context.params
@@ -46,6 +46,18 @@ export async function PUT(
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
     }
     data.role = body.role
+  }
+  // Privilege-escalation guard: only a tenant admin (or super-admin) may grant
+  // or revoke tenant-admin status — a practice-scoped admin must not be able
+  // to set this on anyone, including themselves.
+  if (body.isTenantAdmin !== undefined) {
+    if (!caller.isTenantAdmin && caller.role !== Role.SUPER_ADMIN) {
+      return NextResponse.json(
+        { error: 'Only a tenant administrator can change tenant-admin status' },
+        { status: 403 }
+      )
+    }
+    data.isTenantAdmin = !!body.isTenantAdmin
   }
   // Reset password only when a new one is provided.
   if (body.password) data.password = await bcrypt.hash(body.password, 12)

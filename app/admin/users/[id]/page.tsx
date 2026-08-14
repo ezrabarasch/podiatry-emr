@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import AdminShell from '@/app/admin/AdminShell'
 
 const inputCls = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
@@ -17,14 +18,22 @@ interface EditUser {
   role: string
   active: boolean
   lockedAt: string | null
+  isTenantAdmin: boolean
 }
 
 export default function EditUserPage() {
   const router = useRouter()
   const { id } = useParams() as { id: string }
+  const { data: session } = useSession()
+  // Server (app/api/admin/users/[id]/route.ts PUT) is the real enforcement —
+  // this only hides the control from viewers who couldn't use it anyway.
+  const canSetTenantAdmin = session?.user?.isTenantAdmin === true || session?.user?.role === 'SUPER_ADMIN'
 
   const [user, setUser] = useState<EditUser | null>(null)
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', credentials: '', role: 'PROVIDER', active: true, password: '' })
+  const [form, setForm] = useState({
+    firstName: '', lastName: '', email: '', credentials: '', role: 'PROVIDER', active: true, password: '',
+    isTenantAdmin: false,
+  })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -37,6 +46,7 @@ export default function EditUserPage() {
         setForm({
           firstName: u.firstName, lastName: u.lastName, email: u.email ?? '',
           credentials: u.credentials ?? '', role: u.role, active: u.active, password: '',
+          isTenantAdmin: u.isTenantAdmin,
         })
         setLoading(false)
       })
@@ -55,6 +65,7 @@ export default function EditUserPage() {
       credentials: form.credentials, role: form.role, active: form.active,
     }
     if (form.password) body.password = form.password
+    if (canSetTenantAdmin) body.isTenantAdmin = form.isTenantAdmin
     const res = await fetch(`/api/admin/users/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
@@ -129,6 +140,18 @@ export default function EditUserPage() {
           <input type="checkbox" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="h-4 w-4 rounded border-slate-300 accent-blue-600" />
           <span className="text-sm text-slate-700">Active</span>
         </label>
+
+        {canSetTenantAdmin && (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.isTenantAdmin}
+              onChange={e => setForm(f => ({ ...f, isTenantAdmin: e.target.checked }))}
+              className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+            />
+            <span className="text-sm text-slate-700">Tenant administrator</span>
+          </label>
+        )}
 
         {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
 

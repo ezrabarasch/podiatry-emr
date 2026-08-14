@@ -25,15 +25,23 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
           },
         },
       },
+      staffMembers: {
+        include: {
+          user: {
+            select: { id: true, firstName: true, lastName: true, email: true, role: true, active: true },
+          },
+        },
+      },
     },
   })
   if (!practice) return NextResponse.json({ error: 'Practice not found' }, { status: 404 })
 
-  const { serviceTypes, providers, ...rest } = practice
+  const { serviceTypes, providers, staffMembers, ...rest } = practice
   return NextResponse.json({
     ...rest,
     serviceTypes: serviceTypes.map(st => st.careflowType),
     providers: providers.map(({ user: { _count, ...u } }) => ({ ...u, practiceCount: _count.practices })),
+    staff: staffMembers.map(sp => sp.user),
   })
 }
 
