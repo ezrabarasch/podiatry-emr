@@ -31,6 +31,7 @@ fi
 
 git reset --hard origin/"$BRANCH"
 npm install
+npx prisma generate
 npm run build
 pm2 delete podiatry-emr 2>/dev/null || true
 pm2 start node_modules/.bin/next --name "podiatry-emr" --cwd /opt/podiatry-emr -- start -p 3000
