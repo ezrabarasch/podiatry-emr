@@ -302,11 +302,63 @@ export type ScopedPrismaClient = ReturnType<typeof buildScopedClient>
 // stopgaps). A true-bypass SUPER_ADMIN has no tenant to stamp, so creating
 // is refused outright — they must pick a tenant to act within first.
 //
-// UPDATE/DELETE: merge tenantId into `where` so a request can never mutate a
-// row outside its own tenant. Per spec this is tenant-only, not additionally
-// practice-filtered — see the STOP-FOR-REVIEW report for why that's worth a
-// second look.
+// UPDATE/DELETE: merge tenantId into `where` (unchanged — still the tenant
+// guard) AND, for practice-scoped models, run a practice pre-check first
+// (assertWritableInPracticeScope below) — closes the read/write asymmetry
+// where a same-tenant user could mutate a row outside their own practice
+// scope by knowing its id, even though they could never read it.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Looks up the base client's model accessor by name (e.g. "Visit" ->
+// basePrisma.visit) so the practice pre-check can query the BASE client
+// directly — never the scoped client, which would re-enter this same
+// $allOperations hook and recurse.
+function baseModelClient(model: string) {
+  const key = (model.charAt(0).toLowerCase() + model.slice(1)) as keyof typeof basePrisma
+  return basePrisma[key] as unknown as {
+    findFirst(args: { where: Record<string, unknown>; select: { id: true } }): Promise<{ id: string } | null>
+  }
+}
+
+// Practice pre-check for update/updateMany/delete/deleteMany on a
+// practice-scoped model, in tenant-and-practice mode only — bypass/tenant-
+// only are already tenant-wide (see resolveScope), so there's nothing to
+// narrow for them. Reuses the SAME *Where function reads use
+// (SCOPED_MODEL_WHERE) to build the scope filter, so a write can never be
+// scoped more permissively than a read — both come from one source of truth,
+// never a second, hand-duplicated copy of the practice rules.
+async function assertWritableInPracticeScope(
+  model: string,
+  scope: ResolvedScope,
+  args: { where?: Record<string, unknown> }
+) {
+  if (scope.mode !== 'tenant-and-practice') return
+  if (model === 'User') return // User's own reads are tenant-only too — nothing to narrow
+
+  const targetId = args.where?.id
+  // Every current update/delete call site is a WhereUniqueInput keyed on a
+  // plain string id. If a future updateMany/deleteMany ever filters by
+  // something else instead, this pre-check is skipped rather than guessed
+  // at — the tenantId guard below still applies regardless.
+  if (typeof targetId !== 'string') return
+
+  const scopedWhere = SCOPED_MODEL_WHERE[model](scope)
+  if (!scopedWhere) return
+
+  // AND, not a spread-merge: Practice's own scopedWhere already contains an
+  // `id` key (`{ id: { in: allowedPracticeIds } }`) — spreading `{ id:
+  // targetId }` over it would silently overwrite and discard that filter.
+  // AND-ing two where clauses always combines them, regardless of whether
+  // either one already has an `id` field.
+  const client = baseModelClient(model)
+  const found = await client.findFirst({
+    where: { AND: [scopedWhere, { id: targetId }] },
+    select: { id: true },
+  })
+  if (!found) {
+    throw new Error(`${model} ${targetId} is not within your practice scope`)
+  }
+}
 
 async function handleScopedWrite(params: {
   model: string
@@ -361,6 +413,7 @@ async function handleScopedWrite(params: {
   }
 
   // update / updateMany / delete / deleteMany
+  await assertWritableInPracticeScope(model, scope, args)
   if (tenantId) args.where = { ...args.where, tenantId }
   return query(args)
 }
