@@ -7,6 +7,10 @@ import { isBlockedByCondition } from '@/lib/careflow/conditions'
 
 const MEDICATIONS_TOKEN = '{medications_list}'
 
+// Derived rules targeting this section represent an actual management plan
+// (vs. a finding fragment) — used to count moderate-tier A/P items.
+const AP_SECTION = 'Assessment & Plan'
+
 function classRank(cls: string): number {
   if (cls === 'class_c') return 3
   if (cls === 'class_b') return 2
@@ -158,10 +162,14 @@ export async function assembleNote(visitId: string) {
     orderBy: { priority: 'asc' },
   })
 
+  // Count of distinct firing rules whose plan is an A/P item — the moderate-tier
+  // (99305/99308) trigger input for the leveling step (a later foundation).
+  let apItemCount = 0
   for (const rule of derivedRules) {
     const triggerCodes = rule.triggerCodes as string[]
     if (triggerCodes.some(c => icd10Set.has(c))) {
       ruleFragments.push({ text: rule.noteFragment, order: rule.priority })
+      if (rule.outputSection === AP_SECTION) apItemCount++
     }
   }
 
@@ -226,6 +234,7 @@ export async function assembleNote(visitId: string) {
     }))),
     billingAlerts,
     addendum: fieldSelections.find(s => s.section === '_addendum' && s.fieldKey === 'text')?.value ?? '',
+    apItemCount, // moderate-tier input for the leveling step — not yet consumed anywhere
     isSigned: false,
   }
 }

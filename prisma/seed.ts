@@ -354,8 +354,11 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────────────
   const derivedRules = [
     { conditionName: 'pvd_dx_present', triggerCodes: ['I73.9', 'I70.21'], noteFragment: 'Due to PVD, please be conscious of offloading techniques to prevent pressure ulcers.', outputSection: 'Assessment & Plan', priority: 115 },
-    { conditionName: 'edema_present', triggerCodes: ['R60.0'], noteFragment: 'Compression stockings ordered.', outputSection: 'Assessment & Plan', priority: 116 },
+    { conditionName: 'edema_present', triggerCodes: ['R60.0'], noteFragment: 'Compression stockings ordered due to edema present.', outputSection: 'Assessment & Plan', priority: 116 },
     { conditionName: 'xerosis_present', triggerCodes: ['L85.3'], noteFragment: 'Apply skin emollient to affected area daily.', outputSection: 'Assessment & Plan', priority: 117 },
+    // Mirrored from 20260804000000_careflow_wave1_rule_fixes (hand-authored migration; not previously reflected here)
+    { conditionName: 'ulceration_present', triggerCodes: ['L97.411', 'L97.412', 'L97.519', 'L97.529'], noteFragment: 'Referral to Wound Care Team for Ulceration.', outputSection: 'Assessment & Plan', priority: 118 },
+    { conditionName: 'cuts_fissures_present', triggerCodes: ['L98.8'], noteFragment: 'Apply skin emollient under occlusion daily PRN.', outputSection: 'Assessment & Plan', priority: 119 },
   ]
 
   for (const rule of derivedRules) {
