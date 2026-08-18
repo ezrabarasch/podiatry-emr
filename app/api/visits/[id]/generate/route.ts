@@ -14,6 +14,32 @@ function classRank(cls: string): number {
   return 0
 }
 
+// NF E/M visit codes the leveling step (a later foundation) will emit onto
+// a visit. Exported so that step reuses this exact set instead of a copy.
+export const E_M_CODES = new Set(['99304', '99305', '99306', '99307', '99308', '99309', '99310'])
+
+type CptLine = { code: string; description: string; qualifier: string | null }
+
+// General modifier-derivation step — only the -25 rule is wired today.
+// Future rules (laterality LT/RT, class-finding Q7/Q8/Q9) are additional
+// branches inside the map below, not a reshape.
+function deriveModifiers(lines: CptLine[]): Array<CptLine & { modifiers: string[] }> {
+  const hasProcedureCode = lines.some(l => !E_M_CODES.has(l.code))
+
+  return lines.map(line => {
+    const modifiers: string[] = []
+
+    // -25: significant, separately identifiable E/M service billed alongside
+    // a procedure on the same visit. Dormant until the leveling step starts
+    // emitting E/M codes — no E/M line exists yet, so this never fires today.
+    if (E_M_CODES.has(line.code) && hasProcedureCode) {
+      modifiers.push('25')
+    }
+
+    return { ...line, modifiers }
+  })
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Assemble a visit's generated note. Callable directly (no HTTP) so both the
 // GET handler and the sign route share one source of truth for careflow logic.
@@ -193,11 +219,11 @@ export async function assembleNote(visitId: string) {
       icd10: code,
       description: ICD10_DESCRIPTIONS[code] ?? code,
     })),
-    cptCodes: [...cptSet].map(code => ({
+    cptCodes: deriveModifiers([...cptSet].map(code => ({
       code,
       description: CPT_DESCRIPTIONS[code] ?? code,
       qualifier: cptQualifierMap.get(code) ?? null,
-    })),
+    }))),
     billingAlerts,
     addendum: fieldSelections.find(s => s.section === '_addendum' && s.fieldKey === 'text')?.value ?? '',
     isSigned: false,

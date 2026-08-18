@@ -77,6 +77,13 @@ async function main() {
     { system: 'cpt', code: 'G8427', description: 'Documentation of current medications' },
     { system: 'cpt', code: 'G8783', description: 'Blood pressure controlled/normal' },
     { system: 'cpt', code: 'G8950', description: 'Blood pressure elevated' },
+    { system: 'cpt', code: '99304', description: 'Initial nursing facility care, low complexity MDM' },
+    { system: 'cpt', code: '99305', description: 'Initial nursing facility care, moderate complexity MDM' },
+    { system: 'cpt', code: '99306', description: 'Initial nursing facility care, high complexity MDM' },
+    { system: 'cpt', code: '99307', description: 'Subsequent nursing facility care, straightforward MDM' },
+    { system: 'cpt', code: '99308', description: 'Subsequent nursing facility care, low complexity MDM' },
+    { system: 'cpt', code: '99309', description: 'Subsequent nursing facility care, moderate complexity MDM' },
+    { system: 'cpt', code: '99310', description: 'Subsequent nursing facility care, high complexity MDM' },
   ]
   for (const c of codes) {
     await prisma.code.upsert({
