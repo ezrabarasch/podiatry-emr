@@ -4,6 +4,7 @@ import { getSessionUser } from '@/lib/auth'
 import { formatMedicationList } from '@/lib/medications'
 import { loadCodeDescriptions } from '@/lib/careflow/codes'
 import { isBlockedByCondition } from '@/lib/careflow/conditions'
+import { resolveEncounterType } from '@/lib/careflow/encounter-type'
 
 const MEDICATIONS_TOKEN = '{medications_list}'
 
@@ -13,6 +14,9 @@ const AP_SECTION = 'Assessment & Plan'
 // The "Treatment & Plan" form section (lib/careflow/sections.ts, id: 'treatment') —
 // every matched rule here renders as A/P text (see recon), same as an A/P derived rule.
 const TREATMENT_SECTION = 'treatment'
+// CareflowTypes the NF E/M leveling step applies to. Gated explicitly so a
+// future non-podiatry-NF careflowType doesn't silently inherit an NF E/M code.
+const NF_EM_CAREFLOW_TYPES = new Set(['at_risk_podiatry'])
 
 function classRank(cls: string): number {
   if (cls === 'class_c') return 3
@@ -229,6 +233,45 @@ export async function assembleNote(visitId: string) {
     }
   }
 
+  // ── E/M leveling — emit the nursing-facility E/M visit code from the
+  // documented encounter type (F2) + A/P-item count (F4). Standard + moderate
+  // tiers are live; the HIGH tier is present but dormant until Foundation 3
+  // (risk marker) supplies a real riskHigh. Built as its own cpt line array
+  // (not the final deriveModifiers() output) so the E/M line can be added
+  // BEFORE deriveModifiers runs — that's what lets the existing -25 rule see
+  // both the E/M line and any procedure line and fire automatically.
+  const cptLines: CptLine[] = [...cptSet].map(code => ({
+    code,
+    description: CPT_DESCRIPTIONS[code] ?? code,
+    qualifier: cptQualifierMap.get(code) ?? null,
+  }))
+
+  let emCode: string | null = null
+  let emTier: 'standard' | 'moderate' | 'high' | null = null
+  let encounterType: 'initial' | 'subsequent' | null = null
+
+  if (NF_EM_CAREFLOW_TYPES.has(careflowType)) {
+    encounterType = await resolveEncounterType(visit)
+
+    // TODO(F3): wire riskHigh from the risk-marker field (Foundation 3).
+    // Hardcoded false for now — the high branch below is present and
+    // reachable in the lookup but never selected until F3 lands. Replace
+    // this line with the real risk determination; nothing else here changes.
+    const riskHigh = false
+
+    emTier = riskHigh ? 'high' : (apItemCount >= 3 ? 'moderate' : 'standard')
+
+    // tier → code lookup (a table, so adding e.g. 99310 later is one entry, not logic)
+    const E_M_LOOKUP = {
+      initial:    { standard: '99304', moderate: '99305', high: '99306' },
+      subsequent: { standard: '99307', moderate: '99308', high: '99309' },
+      // 99310 (subsequent highest) reserved — not wired
+    } as const
+
+    emCode = E_M_LOOKUP[encounterType][emTier]
+    cptLines.push({ code: emCode, description: CPT_DESCRIPTIONS[emCode] ?? emCode, qualifier: null })
+  }
+
   // ── Build payload ──────────────────────────────────────────────────────────
   return {
     noteText,
@@ -238,14 +281,13 @@ export async function assembleNote(visitId: string) {
       icd10: code,
       description: ICD10_DESCRIPTIONS[code] ?? code,
     })),
-    cptCodes: deriveModifiers([...cptSet].map(code => ({
-      code,
-      description: CPT_DESCRIPTIONS[code] ?? code,
-      qualifier: cptQualifierMap.get(code) ?? null,
-    }))),
+    cptCodes: deriveModifiers(cptLines),
     billingAlerts,
     addendum: fieldSelections.find(s => s.section === '_addendum' && s.fieldKey === 'text')?.value ?? '',
-    apItemCount, // moderate-tier input for the leveling step — not yet consumed anywhere
+    apItemCount, // moderate-tier input for the leveling step
+    emCode, // the emitted NF E/M code (null if this careflowType doesn't get one)
+    emTier, // 'standard' | 'moderate' | 'high' | null — high is dormant (riskHigh hardcoded false)
+    encounterType, // 'initial' | 'subsequent' | null, from resolveEncounterType (F2)
     isSigned: false,
   }
 }
