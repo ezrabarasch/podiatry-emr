@@ -10,6 +10,9 @@ const MEDICATIONS_TOKEN = '{medications_list}'
 // Derived rules targeting this section represent an actual management plan
 // (vs. a finding fragment) — used to count moderate-tier A/P items.
 const AP_SECTION = 'Assessment & Plan'
+// The "Treatment & Plan" form section (lib/careflow/sections.ts, id: 'treatment') —
+// every matched rule here renders as A/P text (see recon), same as an A/P derived rule.
+const TREATMENT_SECTION = 'treatment'
 
 function classRank(cls: string): number {
   if (cls === 'class_c') return 3
@@ -112,9 +115,18 @@ export async function assembleNote(visitId: string) {
   const specialSectionsList: Array<{ label: string; text: string }> = []
   const seenNarratives = new Set<string>()
 
+  // apItemCount sums two disjoint A/P sources: matched treatment-section rules
+  // (plan/procedure actions, counted below) + firing A/P derived rules (diagnosis-
+  // driven, counted after the derived-rules loop). Disjoint today — treatment-section
+  // rules carry no icd10Codes, so they can't themselves trigger a derived rule — but
+  // this isn't schema-enforced: a future treatment-section field duplicating a derived
+  // rule's clinical action would double-count. Revisit if that's ever authored.
+  let apItemCount = 0
+
   for (const rule of matchedRules) {
     if (rule.noteFragment) {
       ruleFragments.push({ text: rule.noteFragment, order: rule.priority })
+      if (rule.section === TREATMENT_SECTION) apItemCount++
     }
 
     if (rule.icd10Codes) {
@@ -162,9 +174,8 @@ export async function assembleNote(visitId: string) {
     orderBy: { priority: 'asc' },
   })
 
-  // Count of distinct firing rules whose plan is an A/P item — the moderate-tier
-  // (99305/99308) trigger input for the leveling step (a later foundation).
-  let apItemCount = 0
+  // Moderate-tier (99305/99308) trigger input for the leveling step (a later
+  // foundation) — apItemCount's other addend is above, in the matched-rule loop.
   for (const rule of derivedRules) {
     const triggerCodes = rule.triggerCodes as string[]
     if (triggerCodes.some(c => icd10Set.has(c))) {
