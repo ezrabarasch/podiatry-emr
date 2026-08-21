@@ -5,6 +5,7 @@ import { formatMedicationList } from '@/lib/medications'
 import { loadCodeDescriptions } from '@/lib/careflow/codes'
 import { isBlockedByCondition } from '@/lib/careflow/conditions'
 import { resolveEncounterType } from '@/lib/careflow/encounter-type'
+import { CAREFLOW_SECTIONS } from '@/lib/careflow/sections'
 
 const MEDICATIONS_TOKEN = '{medications_list}'
 
@@ -17,6 +18,20 @@ const TREATMENT_SECTION = 'treatment'
 // CareflowTypes the NF E/M leveling step applies to. Gated explicitly so a
 // future non-podiatry-NF careflowType doesn't silently inherit an NF E/M code.
 const NF_EM_CAREFLOW_TYPES = new Set(['at_risk_podiatry'])
+// A/P labeling (Stage A of the bold-label design): human-readable label per
+// derived-rule conditionName. No such label exists as data anywhere (unlike
+// treatment items, which already have one in lib/careflow/sections.ts) — this
+// is a hand-authored, hand-maintained table, same pattern as E_M_LOOKUP below.
+// Ezra-confirmed wording (8/19). A conditionName not listed here renders
+// unlabeled (label: null) rather than failing.
+const DERIVED_RULE_LABELS: Record<string, string> = {
+  pvd_dx_present: 'PVD',
+  edema_present: 'Edema',
+  xerosis_present: 'Xerosis',
+  ulceration_present: 'Ulceration',
+  cuts_fissures_present: 'Cuts/Fissures',
+  macerated_interspaces_present: 'Macerated Interspaces',
+}
 
 function classRank(cls: string): number {
   if (cls === 'class_c') return 3
@@ -114,10 +129,24 @@ export async function assembleNote(visitId: string) {
   const cptSet = new Set<string>()
   const cptQualifierMap = new Map<string, string>()  // cpt code → highest class
   const qualifierClassesFound = new Set<string>()    // all class findings on this visit
-  const ruleFragments: Array<{ text: string; order: number }> = []
+  const ruleFragments: Array<{ text: string; order: number; label: string | null }> = []
   const procedureNotesList: Array<{ label: string; text: string }> = []
   const specialSectionsList: Array<{ label: string; text: string }> = []
   const seenNarratives = new Set<string>()
+
+  // A/P labeling (Stage A): human-readable label per treatment-section fieldKey,
+  // reusing the labels the form already carries in lib/careflow/sections.ts —
+  // no new authoring needed for this source. Keyed by `${sectionId}:${fieldKey}`
+  // (not fieldKey alone) so a same-named fieldKey in a different section can't
+  // collide with this lookup.
+  const treatmentLabelByKey = new Map<string, string>()
+  for (const section of CAREFLOW_SECTIONS[careflowType] ?? []) {
+    for (const group of section.groups) {
+      for (const field of group.fields) {
+        treatmentLabelByKey.set(`${section.id}:${field.key}`, field.label)
+      }
+    }
+  }
 
   // apItemCount sums two disjoint A/P sources: matched treatment-section rules
   // (plan/procedure actions, counted below) + firing A/P derived rules (diagnosis-
@@ -129,8 +158,10 @@ export async function assembleNote(visitId: string) {
 
   for (const rule of matchedRules) {
     if (rule.noteFragment) {
-      ruleFragments.push({ text: rule.noteFragment, order: rule.priority })
-      if (rule.section === TREATMENT_SECTION) apItemCount++
+      const isTreatmentItem = rule.section === TREATMENT_SECTION
+      const label = isTreatmentItem ? treatmentLabelByKey.get(`${rule.section}:${rule.fieldKey}`) ?? null : null
+      ruleFragments.push({ text: rule.noteFragment, order: rule.priority, label })
+      if (isTreatmentItem) apItemCount++
     }
 
     if (rule.icd10Codes) {
@@ -183,8 +214,10 @@ export async function assembleNote(visitId: string) {
   for (const rule of derivedRules) {
     const triggerCodes = rule.triggerCodes as string[]
     if (triggerCodes.some(c => icd10Set.has(c))) {
-      ruleFragments.push({ text: rule.noteFragment, order: rule.priority })
-      if (rule.outputSection === AP_SECTION) apItemCount++
+      const isApRule = rule.outputSection === AP_SECTION
+      const label = isApRule ? DERIVED_RULE_LABELS[rule.conditionName] ?? null : null
+      ruleFragments.push({ text: rule.noteFragment, order: rule.priority, label })
+      if (isApRule) apItemCount++
     }
   }
 
@@ -195,11 +228,11 @@ export async function assembleNote(visitId: string) {
   })
 
   // ── Assemble note text ─────────────────────────────────────────────────────
-  type NoteItem = { text: string; order: number; isStatic: boolean }
+  type NoteItem = { text: string; order: number; isStatic: boolean; label: string | null }
 
   const allItems: NoteItem[] = [
-    ...staticFragments.map(f => ({ text: f.fragmentText, order: f.position, isStatic: true })),
-    ...ruleFragments.map(f => ({ text: f.text, order: f.order, isStatic: false })),
+    ...staticFragments.map(f => ({ text: f.fragmentText, order: f.position, isStatic: true, label: null })),
+    ...ruleFragments.map(f => ({ text: f.text, order: f.order, isStatic: false, label: f.label })),
   ]
   allItems.sort((a, b) => a.order !== b.order ? a.order - b.order : (a.isStatic ? -1 : 1))
 
@@ -210,13 +243,30 @@ export async function assembleNote(visitId: string) {
   }
   let noteText = noteLines.join('\n')
 
+  // A/P labeling (Stage A) — a structured parallel to noteText, built from the
+  // same sorted allItems, so the order always matches. Unused today: nothing
+  // persists or renders this yet (Stages B/C/D). label is non-null only for
+  // the A/P items (set above); every other fragment carries label: null.
+  type NoteNode =
+    | { type: 'header'; text: string }
+    | { type: 'item'; label: string | null; text: string }
+
+  let noteStructured: NoteNode[] = allItems.map(item =>
+    item.isStatic
+      ? { type: 'header', text: item.text }
+      : { type: 'item', label: item.label, text: item.text }
+  )
+
   // ── Token substitution ─────────────────────────────────────────────────────
   if (noteText.includes(MEDICATIONS_TOKEN)) {
     const medications = await prisma.patientMedication.findMany({
       where: { patientId: visit.patientId },
       orderBy: { description: 'asc' },
     })
-    noteText = noteText.split(MEDICATIONS_TOKEN).join(formatMedicationList(medications) || 'none on file')
+    const medicationsList = formatMedicationList(medications) || 'none on file'
+    noteText = noteText.split(MEDICATIONS_TOKEN).join(medicationsList)
+    // Same substitution on the structured path, so both forms agree on this line.
+    noteStructured = noteStructured.map(node => ({ ...node, text: node.text.split(MEDICATIONS_TOKEN).join(medicationsList) }))
   }
 
   // ── CPT qualifier billing alerts ───────────────────────────────────────────
@@ -281,6 +331,7 @@ export async function assembleNote(visitId: string) {
   // ── Build payload ──────────────────────────────────────────────────────────
   return {
     noteText,
+    noteStructured, // A/P-labeled parallel form (Stage A) — not persisted or rendered yet
     procedureNotes: procedureNotesList,
     specialSections: specialSectionsList,
     diagnoses: [...icd10Set].map(code => ({
