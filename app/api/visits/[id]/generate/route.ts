@@ -234,12 +234,12 @@ export async function assembleNote(visitId: string) {
   }
 
   // ── E/M leveling — emit the nursing-facility E/M visit code from the
-  // documented encounter type (F2) + A/P-item count (F4). Standard + moderate
-  // tiers are live; the HIGH tier is present but dormant until Foundation 3
-  // (risk marker) supplies a real riskHigh. Built as its own cpt line array
-  // (not the final deriveModifiers() output) so the E/M line can be added
-  // BEFORE deriveModifiers runs — that's what lets the existing -25 rule see
-  // both the E/M line and any procedure line and fire automatically.
+  // documented encounter type (F2) + A/P-item count (F4). All three tiers
+  // are live — podiatry has no risk-marker path, so the count alone drives
+  // the tier. Built as its own cpt line array (not the final
+  // deriveModifiers() output) so the E/M line can be added BEFORE
+  // deriveModifiers runs — that's what lets the existing -25 rule see both
+  // the E/M line and any procedure line and fire automatically.
   const cptLines: CptLine[] = [...cptSet].map(code => ({
     code,
     description: CPT_DESCRIPTIONS[code] ?? code,
@@ -247,24 +247,30 @@ export async function assembleNote(visitId: string) {
   }))
 
   let emCode: string | null = null
-  let emTier: 'standard' | 'moderate' | 'high' | null = null
+  let emTier: 'standard' | 'middle' | 'high' | null = null
   let encounterType: 'initial' | 'subsequent' | null = null
 
   if (NF_EM_CAREFLOW_TYPES.has(careflowType)) {
     encounterType = await resolveEncounterType(visit)
 
-    // TODO(F3): wire riskHigh from the risk-marker field (Foundation 3).
-    // Hardcoded false for now — the high branch below is present and
-    // reachable in the lookup but never selected until F3 lands. Replace
-    // this line with the real risk determination; nothing else here changes.
-    const riskHigh = false
-
-    emTier = riskHigh ? 'high' : (apItemCount >= 3 ? 'moderate' : 'standard')
+    // Podiatry E/M leveling is driven purely by the A/P-item count — no risk
+    // markers (other service lines may use a different formula; this profile
+    // is podiatry-only, gated by NF_EM_CAREFLOW_TYPES above). Confirmed bands
+    // (Jonathan 8/19): 0-1 items -> standard, 2-4 -> middle, 5+ -> high.
+    // Tier names are deliberately not "moderate" — CPT's own MDM-complexity
+    // wording for these codes doesn't line up with a clean 3-way split
+    // (e.g. 99308's official label is "low complexity", not "moderate").
+    const PODIATRY_EM_BANDS = [
+      { max: 1, tier: 'standard' as const },        // 0-1 items
+      { max: 4, tier: 'middle' as const },          // 2-4 items
+      { max: Infinity, tier: 'high' as const },     // 5+ items
+    ]
+    emTier = PODIATRY_EM_BANDS.find(b => apItemCount <= b.max)!.tier
 
     // tier → code lookup (a table, so adding e.g. 99310 later is one entry, not logic)
     const E_M_LOOKUP = {
-      initial:    { standard: '99304', moderate: '99305', high: '99306' },
-      subsequent: { standard: '99307', moderate: '99308', high: '99309' },
+      initial:    { standard: '99304', middle: '99305', high: '99306' },
+      subsequent: { standard: '99307', middle: '99308', high: '99309' },
       // 99310 (subsequent highest) reserved — not wired
     } as const
 
@@ -286,7 +292,7 @@ export async function assembleNote(visitId: string) {
     addendum: fieldSelections.find(s => s.section === '_addendum' && s.fieldKey === 'text')?.value ?? '',
     apItemCount, // moderate-tier input for the leveling step
     emCode, // the emitted NF E/M code (null if this careflowType doesn't get one)
-    emTier, // 'standard' | 'moderate' | 'high' | null — high is dormant (riskHigh hardcoded false)
+    emTier, // 'standard' | 'middle' | 'high' | null — driven purely by apItemCount (no risk-marker path)
     encounterType, // 'initial' | 'subsequent' | null, from resolveEncounterType (F2)
     isSigned: false,
   }
