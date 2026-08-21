@@ -11,8 +11,15 @@ import Button from '@/app/components/Button'
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Mirrors NoteNode in app/api/visits/[id]/generate/route.ts (declared inside
+// assembleNote(), not exported — kept in sync by hand rather than shared).
+type NoteNode =
+  | { type: 'header'; text: string }
+  | { type: 'item'; label: string | null; text: string }
+
 interface GeneratedNote {
   noteText: string
+  noteStructured: NoteNode[] | null
   procedureNotes: Array<{ label: string; text: string }>
   specialSections: Array<{ label: string; text: string }>
   diagnoses: Array<{ icd10: string; description: string }>
@@ -238,7 +245,23 @@ export default function NotePage() {
                 <h3 className="text-sm font-semibold text-slate-700">Progress Note</h3>
               </div>
               <div className="p-5">
-                {note.noteText ? (
+                {note.noteStructured ? (
+                  <div className="text-sm text-slate-800 leading-relaxed bg-slate-50/60 rounded-lg p-4 border border-slate-100">
+                    {note.noteStructured.map((node, i) =>
+                      node.type === 'header' ? (
+                        <div key={i} className={`font-semibold text-slate-700 ${i === 0 ? '' : 'mt-4'}`}>
+                          {node.text}
+                        </div>
+                      ) : node.label ? (
+                        <div key={i} className="mt-1">
+                          <strong>{node.label}:</strong> {node.text}
+                        </div>
+                      ) : (
+                        <div key={i} className="mt-1">{node.text}</div>
+                      )
+                    )}
+                  </div>
+                ) : note.noteText ? (
                   <pre className="text-sm text-slate-800 font-mono whitespace-pre-wrap leading-relaxed bg-slate-50/60 rounded-lg p-4 border border-slate-100">
                     {note.noteText}
                   </pre>
