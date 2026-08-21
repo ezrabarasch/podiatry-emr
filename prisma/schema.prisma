@@ -351,6 +351,7 @@ model VisitNote {
   id                   String   @id @default(uuid())
   visitId              String   @unique
   noteText             String   @db.Text  // fully assembled progress note
+  noteStructured       Json?    // [{ type: "header"|"item", label?, text }, ...] — A/P-labeled parallel to noteText; null on notes signed before this field existed
   procedureNotes       Json?    // [{ label: "Procedure Note", text: "..." }, ...]
   specialSections      Json?    // [{ label: "Smoking Cessation Counseling", text: "..." }, ...]
   diagnoses            Json     // [{ icd10: "B35.1", description: "Tinea unguium" }, ...]

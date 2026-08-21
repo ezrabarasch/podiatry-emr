@@ -90,6 +90,7 @@ export async function assembleNote(visitId: string) {
     const n = visit.note
     return {
       noteText: n.noteText,
+      noteStructured: n.noteStructured ?? null, // frozen at sign — null on notes signed before this field existed
       procedureNotes: n.procedureNotes ?? [],
       specialSections: n.specialSections ?? [],
       diagnoses: n.diagnoses,
