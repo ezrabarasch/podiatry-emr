@@ -6,6 +6,7 @@ import { loadCodeDescriptions } from '@/lib/careflow/codes'
 import { isBlockedByCondition } from '@/lib/careflow/conditions'
 import { resolveEncounterType } from '@/lib/careflow/encounter-type'
 import { CAREFLOW_SECTIONS } from '@/lib/careflow/sections'
+import type { NoteNode } from '@/lib/careflow/note-types'
 
 const MEDICATIONS_TOKEN = '{medications_list}'
 
@@ -245,13 +246,9 @@ export async function assembleNote(visitId: string) {
   let noteText = noteLines.join('\n')
 
   // A/P labeling (Stage A) — a structured parallel to noteText, built from the
-  // same sorted allItems, so the order always matches. Unused today: nothing
-  // persists or renders this yet (Stages B/C/D). label is non-null only for
+  // same sorted allItems, so the order always matches. Rendered by the web
+  // note view (Stage C) and the PDF (Stage D2) — label is non-null only for
   // the A/P items (set above); every other fragment carries label: null.
-  type NoteNode =
-    | { type: 'header'; text: string }
-    | { type: 'item'; label: string | null; text: string }
-
   let noteStructured: NoteNode[] = allItems.map(item =>
     item.isStatic
       ? { type: 'header', text: item.text }

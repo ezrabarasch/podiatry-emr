@@ -6,16 +6,11 @@ import { useRouter, useParams } from 'next/navigation'
 import PageShell from '@/app/components/PageShell'
 import Badge from '@/app/components/Badge'
 import Button from '@/app/components/Button'
+import type { NoteNode } from '@/lib/careflow/note-types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
-
-// Mirrors NoteNode in app/api/visits/[id]/generate/route.ts (declared inside
-// assembleNote(), not exported — kept in sync by hand rather than shared).
-type NoteNode =
-  | { type: 'header'; text: string }
-  | { type: 'item'; label: string | null; text: string }
 
 interface GeneratedNote {
   noteText: string

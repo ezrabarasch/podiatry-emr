@@ -4,14 +4,19 @@
 // any bundler / Docker deploy. ponytail: text-only, single font family; add a
 // real PDF lib only if we need images, tables, or proportional fonts.
 
-export type Line = { text: string; bold?: boolean }
+export type Run = { text: string; bold?: boolean }
+// A plain {text, bold?} line is a one-run line — kept as its own shape so
+// every existing caller stays exactly as simple as it was. `runs` is for a
+// line that needs more than one font on the same baseline (e.g. a bold
+// label followed by a plain sentence) — see the multi-run note in buildPdf.
+export type Line = { text: string; bold?: boolean } | { runs: Run[] }
 
 const PAGE_W = 612          // US Letter, points
 const PAGE_H = 792
 const MARGIN = 54
 const SIZE = 10
 const LINE_H = 14
-const CHARS_PER_LINE = 84   // Courier advance = 0.6*size = 6pt; 504pt usable / 6
+export const CHARS_PER_LINE = 84   // Courier advance = 0.6*size = 6pt; 504pt usable / 6
 const LINES_PER_PAGE = 48
 
 /** Wrap a paragraph to CHARS_PER_LINE, preserving words where possible. */
@@ -70,11 +75,23 @@ export function buildPdf(lines: Line[]): Buffer {
     let curFont = ''
     let y = PAGE_H - MARGIN
     pageLines.forEach((ln, idx) => {
-      const font = ln.bold ? '/F2' : '/F1'
-      if (font !== curFont) { stream += `${font} ${SIZE} Tf\n`; curFont = font }
       if (idx === 0) stream += `${MARGIN} ${y} Td\n`
       else { stream += `0 ${-LINE_H} Td\n`; y -= LINE_H }
-      stream += `(${esc(ln.text)}) Tj\n`
+
+      // Td (above) positions the START of this line only, once. Every run
+      // below is a separate Tf+Tj with no Td between them, so the PDF text
+      // object's own auto-advance (Tj moves the cursor by the shown string's
+      // width, per the current font's metrics) keeps consecutive runs on the
+      // same baseline, contiguous — the standard mechanism for mixed-font
+      // text on one line, not something this writer tracks by hand. A plain
+      // {text, bold?} line is just a one-run line, so existing callers emit
+      // the exact same single Tf(-if-changed)+Tj they always did.
+      const runs: Run[] = 'runs' in ln ? ln.runs : [{ text: ln.text, bold: ln.bold }]
+      for (const run of runs) {
+        const font = run.bold ? '/F2' : '/F1'
+        if (font !== curFont) { stream += `${font} ${SIZE} Tf\n`; curFont = font }
+        stream += `(${esc(run.text)}) Tj\n`
+      }
     })
     stream += 'ET'
 
