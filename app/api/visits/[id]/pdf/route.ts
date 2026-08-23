@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
-import { buildPdf, wrap, type Line } from '@/lib/pdf'
+import { buildPdf, wrap, CHARS_PER_LINE, type Line } from '@/lib/pdf'
+import type { NoteNode } from '@/lib/careflow/note-types'
 
 const fmt = (d: Date | null) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
@@ -47,9 +48,40 @@ export async function GET(
   lines.push({ text: `Visit:    ${fmt(visit.visitDate)}` })
   lines.push({ text: `Provider: ${prov}` })
 
-  // Progress note
+  // Progress note — structured (bold A/P labels) when noteStructured is
+  // present; falls back to the original flat body(noteText) for notes
+  // signed before Stage B (noteStructured null) — unchanged for those notes.
   heading('PROGRESS NOTE')
-  if (n.noteText) body(n.noteText); else lines.push({ text: '(none)' })
+  const noteStructured = (n.noteStructured ?? null) as NoteNode[] | null
+  if (noteStructured) {
+    for (const node of noteStructured) {
+      if (node.type === 'header') {
+        // Bold as a unit, same as the web view's header styling — wrapped
+        // (not a single unwrapped heading() line) because a header node can
+        // be a full narrative sentence, not just a short section title (e.g.
+        // the HPI static fragment), and could otherwise overflow the page width.
+        lines.push({ text: '' })
+        wrap(node.text).forEach(l => lines.push({ text: l, bold: true }))
+      } else if (node.label) {
+        // Bold "Label: " run + plain sentence run, same line, no Td between
+        // them (see lib/pdf.ts) — wrap-continuation: only the FIRST physical
+        // line carries the bold label (at a width reduced by the label's own
+        // length); any remaining words wrap as plain lines at full width.
+        const labelPrefix = `${node.label}: `
+        const firstLineWidth = Math.max(1, CHARS_PER_LINE - labelPrefix.length)
+        const firstSegment = wrap(node.text, firstLineWidth)[0] ?? ''
+        const remainder = node.text.split(' ').slice(firstSegment.split(' ').length).join(' ')
+        lines.push({ runs: [{ text: labelPrefix, bold: true }, { text: firstSegment }] })
+        if (remainder) wrap(remainder).forEach(l => lines.push({ text: l }))
+      } else {
+        body(node.text)
+      }
+    }
+  } else if (n.noteText) {
+    body(n.noteText)
+  } else {
+    lines.push({ text: '(none)' })
+  }
 
   // Procedure notes
   procedureNotes.forEach(proc => {

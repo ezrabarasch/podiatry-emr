@@ -38,6 +38,7 @@ export async function POST(
     data: {
       visitId,
       noteText: gen.noteText ?? '',
+      noteStructured: gen.noteStructured ?? undefined,
       diagnoses: gen.diagnoses ?? [],
       cptCodes: gen.cptCodes ?? [],
       procedureNotes: gen.procedureNotes ?? [],

@@ -91,6 +91,13 @@ async function main() {
     { system: 'cpt', code: 'G8427', description: 'Documentation of current medications' },
     { system: 'cpt', code: 'G8783', description: 'Blood pressure controlled/normal' },
     { system: 'cpt', code: 'G8950', description: 'Blood pressure elevated' },
+    { system: 'cpt', code: '99304', description: 'Initial nursing facility care, low complexity MDM' },
+    { system: 'cpt', code: '99305', description: 'Initial nursing facility care, moderate complexity MDM' },
+    { system: 'cpt', code: '99306', description: 'Initial nursing facility care, high complexity MDM' },
+    { system: 'cpt', code: '99307', description: 'Subsequent nursing facility care, straightforward MDM' },
+    { system: 'cpt', code: '99308', description: 'Subsequent nursing facility care, low complexity MDM' },
+    { system: 'cpt', code: '99309', description: 'Subsequent nursing facility care, moderate complexity MDM' },
+    { system: 'cpt', code: '99310', description: 'Subsequent nursing facility care, high complexity MDM' },
   ]
   for (const c of codes) {
     await prisma.code.upsert({
@@ -361,8 +368,13 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────────────
   const derivedRules = [
     { conditionName: 'pvd_dx_present', triggerCodes: ['I73.9', 'I70.21'], noteFragment: 'Due to PVD, please be conscious of offloading techniques to prevent pressure ulcers.', outputSection: 'Assessment & Plan', priority: 115 },
-    { conditionName: 'edema_present', triggerCodes: ['R60.0'], noteFragment: 'Compression stockings ordered.', outputSection: 'Assessment & Plan', priority: 116 },
-    { conditionName: 'xerosis_present', triggerCodes: ['L85.3'], noteFragment: 'Apply skin emollient to affected area daily.', outputSection: 'Assessment & Plan', priority: 117 },
+    { conditionName: 'edema_present', triggerCodes: ['R60.0'], noteFragment: 'Compression stockings ordered due to edema present.', outputSection: 'Assessment & Plan', priority: 116 },
+    { conditionName: 'xerosis_present', triggerCodes: ['L85.3'], noteFragment: 'Apply skin emollient and dry dressing to affected area daily.', outputSection: 'Assessment & Plan', priority: 117 },
+    // Mirrored from 20260804000000_careflow_wave1_rule_fixes (hand-authored migration; not previously reflected here)
+    { conditionName: 'ulceration_present', triggerCodes: ['L97.411', 'L97.412', 'L97.519', 'L97.529'], noteFragment: 'Referral to Wound Care Team for Ulceration.', outputSection: 'Assessment & Plan', priority: 118 },
+    { conditionName: 'cuts_fissures_present', triggerCodes: ['L98.8'], noteFragment: 'Apply skin emollient and dry dressing daily PRN.', outputSection: 'Assessment & Plan', priority: 119 },
+    // Mirrored from 20260819000000_em_derived_rule_updates (hand-authored migration; not previously reflected here)
+    { conditionName: 'macerated_interspaces_present', triggerCodes: ['B35.3'], noteFragment: 'Apply skin emollient and dry dressing daily PRN.', outputSection: 'Assessment & Plan', priority: 120 },
   ]
 
   for (const rule of derivedRules) {
