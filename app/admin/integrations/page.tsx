@@ -40,6 +40,7 @@ export default function IntegrationsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [runningModule, setRunningModule] = useState<string | null>(null)
 
   const load = () =>
     fetch('/api/admin/integrations').then(r => r.json()).then((data: Source[]) => {
@@ -71,6 +72,29 @@ export default function IntegrationsPage() {
     setSyncing(true)
     await fetch('/api/admin/integrations/pcc/sync', { method: 'POST' })
     setSyncing(false)
+  }
+
+  // Real execution, shared prod DB regardless of environment — confirm every time.
+  async function handleRunNow(source: string, resourceName: string) {
+    const label = RESOURCE_LABELS[resourceName] ?? resourceName
+    if (!confirm(`Run sync now for "${label}"? This writes live data to production.`)) return
+
+    const key = `${source}:${resourceName}`
+    setRunningModule(key)
+    try {
+      const res = await fetch(`/api/admin/integrations/${source}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resourceName }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      await load()
+    } catch (err) {
+      console.error('Run Now failed:', err)
+      alert(`Sync failed for ${label}`)
+    } finally {
+      setRunningModule(null)
+    }
   }
 
   const connected = pcc?.status === 'connected'
@@ -117,7 +141,7 @@ export default function IntegrationsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-[#F8FAFC]">
-                    {['Resource', 'Enabled', 'Frequency', 'Last Run', 'Last Count', 'Last Error'].map(h => (
+                    {['Resource', 'Enabled', 'Frequency', 'Last Run', 'Last Count', 'Last Error', 'Action'].map(h => (
                       <th key={h} className="text-left px-5 py-3 text-[10px] font-semibold text-[#64748B] uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
@@ -148,6 +172,15 @@ export default function IntegrationsPage() {
                       <td className="px-5 py-4 text-sm text-text-muted">{fmtDate(c.lastSyncAt)}</td>
                       <td className="px-5 py-4 text-sm text-text-muted">{c.lastCount ?? '—'}</td>
                       <td className="px-5 py-4 text-sm text-danger">{c.lastError ?? '—'}</td>
+                      <td className="px-5 py-4">
+                        <button
+                          onClick={() => handleRunNow('pcc', c.resourceName)}
+                          disabled={runningModule === `pcc:${c.resourceName}`}
+                          className="text-xs px-3 py-1 rounded border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          {runningModule === `pcc:${c.resourceName}` ? 'Running...' : 'Run Now'}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
