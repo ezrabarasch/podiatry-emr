@@ -63,6 +63,7 @@ async function main() {
     { system: 'icd10', code: 'M62.82', description: 'Muscle weakness, left lower leg' },
     { system: 'icd10', code: 'M79.671', description: 'Pain in right foot' },
     { system: 'icd10', code: 'M79.672', description: 'Pain in left foot' },
+    { system: 'icd10', code: 'R03.0', description: 'Elevated blood pressure reading, without diagnosis of hypertension' },
     { system: 'icd10', code: 'R60.0', description: 'Localized edema' },
     { system: 'icd10', code: 'Z89.411', description: 'Acquired absence of right great toe' },
     { system: 'icd10', code: 'Z89.412', description: 'Acquired absence of left great toe' },
@@ -124,9 +125,13 @@ async function main() {
 
     // ── Vitals ───────────────────────────────────────────────────────────────
     { section: 'vitals', fieldKey: 'blood_pressure', fieldValue: 'normal_no_htn', noteFragment: 'Blood pressure is normal. No HTN diagnosis on file.', cptCodes: ['G8783'], priority: 30 },
-    { section: 'vitals', fieldKey: 'blood_pressure', fieldValue: 'elevated_no_htn', noteFragment: 'Blood pressure is elevated. No HTN diagnosis on file.', cptCodes: ['G8950'], priority: 30 },
+    // elevated_no_htn / normal_with_htn ICD codes corrected 2026-08-25 to match
+    // the locked BP-coding case table: case 4 (elevated/no-HTN) codes R03.0
+    // (elevated reading, no HTN dx on file); case 2 (normal/HTN) codes nothing —
+    // a normal reading doesn't get re-coded just because HTN is on file.
+    { section: 'vitals', fieldKey: 'blood_pressure', fieldValue: 'elevated_no_htn', noteFragment: 'Blood pressure is elevated. No HTN diagnosis on file.', icd10Codes: ['R03.0'], cptCodes: ['G8950'], priority: 30 },
     { section: 'vitals', fieldKey: 'blood_pressure', fieldValue: 'elevated_with_htn', noteFragment: 'Blood pressure is elevated, consistent with documented HTN diagnosis.', icd10Codes: ['I10'], cptCodes: ['G8950'], priority: 30 },
-    { section: 'vitals', fieldKey: 'blood_pressure', fieldValue: 'normal_with_htn', noteFragment: 'Blood pressure is normal, patient has documented HTN diagnosis.', icd10Codes: ['I10'], cptCodes: ['G8783'], priority: 30 },
+    { section: 'vitals', fieldKey: 'blood_pressure', fieldValue: 'normal_with_htn', noteFragment: 'Blood pressure is normal, patient has documented HTN diagnosis.', cptCodes: ['G8783'], priority: 30 },
 
     // ── Vascular — Class A ───────────────────────────────────────────────────
     { section: 'vascular_exam', fieldKey: 'class_a_amputation', fieldValue: 'right', noteFragment: 'Non-traumatic amputation noted on the right foot.', icd10Codes: ['Z89.411'], cptQualifier: 'class_a', priority: 40 },
@@ -331,6 +336,9 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────────────
   const staticFragments = [
     { section: 'hpi', position: 1, fragmentText: 'Patient seen today for podiatric evaluation and treatment. The patient reports no complaints, no distress noted. Denies SOB, nausea, and/or vomiting.' },
+    // Mirrored from 20260822000000_bp_vitals_coding — above physical_exam(39),
+    // at/right-before the existing blood_pressure rule fragments (priority 30).
+    { section: 'vitals', position: 29, fragmentText: 'Vitals:' },
     { section: 'physical_exam', position: 39, fragmentText: 'Physical examination was performed as follows:' },
     { section: 'vascular_exam', position: 40, fragmentText: 'Vascular Examination:' },
     { section: 'orthopedic_exam', position: 59, fragmentText: 'Orthopedic Examination:' },
@@ -361,6 +369,9 @@ async function main() {
     { conditionName: 'cuts_fissures_present', triggerCodes: ['L98.8'], noteFragment: 'Apply skin emollient and dry dressing daily PRN.', outputSection: 'Assessment & Plan', priority: 119 },
     // Mirrored from 20260819000000_em_derived_rule_updates (hand-authored migration; not previously reflected here)
     { conditionName: 'macerated_interspaces_present', triggerCodes: ['B35.3'], noteFragment: 'Apply skin emollient and dry dressing daily PRN.', outputSection: 'Assessment & Plan', priority: 120 },
+    // Mirrored from 20260822000000_bp_vitals_coding — fires on I10 or R03.0,
+    // the two elevated BP cases (3 & 4); neither code is added by any other rule.
+    { conditionName: 'bp_followup_present', triggerCodes: ['I10', 'R03.0'], noteFragment: 'Follow up with PCP recommended for elevated blood pressure.', outputSection: 'Assessment & Plan', priority: 121 },
   ]
 
   for (const rule of derivedRules) {

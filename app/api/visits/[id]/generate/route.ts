@@ -7,6 +7,7 @@ import { isBlockedByCondition } from '@/lib/careflow/conditions'
 import { resolveEncounterType } from '@/lib/careflow/encounter-type'
 import { CAREFLOW_SECTIONS } from '@/lib/careflow/sections'
 import type { NoteNode } from '@/lib/careflow/note-types'
+import { classifyBp, bpWindowUtc, HTN_ICD10_PREFIXES, type BpCase } from '@/lib/careflow/bp-vitals'
 
 const MEDICATIONS_TOKEN = '{medications_list}'
 
@@ -32,6 +33,27 @@ const DERIVED_RULE_LABELS: Record<string, string> = {
   ulceration_present: 'Ulceration',
   cuts_fissures_present: 'Cuts/Fissures',
   macerated_interspaces_present: 'Macerated Interspaces',
+  bp_followup_present: 'BP Follow-up',
+}
+
+// Live BP case for this visit, or null if no qualifying reading exists (no rule
+// fires — graceful fallback, not an error; test data is sparse/old, PCC could
+// hiccup, and miscoding is worse than omitting).
+async function computeBpCase(prisma: ScopedPrismaClient, patientId: string, visitDate: Date): Promise<BpCase | null> {
+  const [windowStart, windowEnd] = bpWindowUtc(visitDate)
+  const reading = await prisma.patientObservation.findFirst({
+    where: { patientId, type: 'bloodPressure', recordedDate: { gte: windowStart, lt: windowEnd } },
+    orderBy: { recordedDate: 'desc' },
+  })
+  if (!reading || reading.systolicValue == null || reading.diastolicValue == null) return null
+
+  // Independent of icd10Set (which only has I10 if this very rule already put
+  // it there — circular). PatientDiagnosis is PCC-synced daily, separately.
+  const htnDx = await prisma.patientDiagnosis.findFirst({
+    where: { patientId, active: true, OR: HTN_ICD10_PREFIXES.map(prefix => ({ icd10: { startsWith: prefix } })) },
+  })
+
+  return classifyBp(reading.systolicValue, reading.diastolicValue, !!htnDx, reading.unit)
 }
 
 function classRank(cls: string): number {
@@ -109,19 +131,26 @@ export async function assembleNote(visitId: string) {
   const medHistory = (visit.emrImport?.medicalHistory ?? []) as Array<{ icd10?: string }>
   const conditionCtx = { medicalHistory: medHistory }
 
+  // ── BP vitals coding (SPEC confirmed 2026-08-25) ───────────────────────────
+  // Automates the existing manual blood_pressure field from live PCC vitals +
+  // HTN dx status — but a clinician's own manual selection always wins; this
+  // never overrides an explicit choice, only fills the field when it's blank.
+  const hasManualBpSelection = visit.fieldSelections.some(s => s.section === 'vitals' && s.fieldKey === 'blood_pressure')
+  const bpCase = hasManualBpSelection ? null : await computeBpCase(prisma, visit.patientId, visit.visitDate)
+
   // ── Match careflow rules ───────────────────────────────────────────────────
   const fieldSelections = visit.fieldSelections
-  const matchedRules = fieldSelections.length > 0
+  const matchedRuleOr = [
+    ...fieldSelections.map(sel => ({ section: sel.section, fieldKey: sel.fieldKey, fieldValue: sel.value })),
+    // Synthetic selection — reuses the existing blood_pressure CareflowRule
+    // rows unchanged, so cptCodes/icd10Codes/noteFragment processing below
+    // doesn't need to know or care whether a selection came from the form or
+    // from live vitals.
+    ...(bpCase ? [{ section: 'vitals', fieldKey: 'blood_pressure', fieldValue: bpCase.fieldValue }] : []),
+  ]
+  const matchedRules = matchedRuleOr.length > 0
     ? await prisma.careflowRule.findMany({
-        where: {
-          careflowType,
-          active: true,
-          OR: fieldSelections.map(sel => ({
-            section: sel.section,
-            fieldKey: sel.fieldKey,
-            fieldValue: sel.value,
-          })),
-        },
+        where: { careflowType, active: true, OR: matchedRuleOr },
         orderBy: { priority: 'asc' },
       })
     : []
@@ -135,6 +164,18 @@ export async function assembleNote(visitId: string) {
   const procedureNotesList: Array<{ label: string; text: string }> = []
   const specialSectionsList: Array<{ label: string; text: string }> = []
   const seenNarratives = new Set<string>()
+
+  // Vitals display line — raw reading + computed case, right under the new
+  // "Vitals:" header (priority 29, same as the header — static wins the tie).
+  // The coding sentence itself (priority 30) comes from the matched rule above.
+  if (bpCase) {
+    const unitText = bpCase.unit ? ` ${bpCase.unit}` : ''
+    ruleFragments.push({
+      text: `Blood Pressure: ${bpCase.systolic}/${bpCase.diastolic}${unitText} (${bpCase.label})`,
+      order: 29,
+      label: null,
+    })
+  }
 
   // A/P labeling (Stage A): human-readable label per treatment-section fieldKey,
   // reusing the labels the form already carries in lib/careflow/sections.ts —
