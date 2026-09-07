@@ -39,7 +39,7 @@ const DERIVED_RULE_LABELS: Record<string, string> = {
 // Live BP case for this visit, or null if no qualifying reading exists (no rule
 // fires — graceful fallback, not an error; test data is sparse/old, PCC could
 // hiccup, and miscoding is worse than omitting).
-async function computeBpCase(prisma: ScopedPrismaClient, patientId: string, visitDate: Date): Promise<BpCase | null> {
+async function computeBpCase(patientId: string, visitDate: Date): Promise<BpCase | null> {
   const [windowStart, windowEnd] = bpWindowUtc(visitDate)
   const reading = await prisma.patientObservation.findFirst({
     where: { patientId, type: 'bloodPressure', recordedDate: { gte: windowStart, lt: windowEnd } },
@@ -136,7 +136,7 @@ export async function assembleNote(visitId: string) {
   // HTN dx status — but a clinician's own manual selection always wins; this
   // never overrides an explicit choice, only fills the field when it's blank.
   const hasManualBpSelection = visit.fieldSelections.some(s => s.section === 'vitals' && s.fieldKey === 'blood_pressure')
-  const bpCase = hasManualBpSelection ? null : await computeBpCase(prisma, visit.patientId, visit.visitDate)
+  const bpCase = hasManualBpSelection ? null : await computeBpCase(visit.patientId, visit.visitDate)
 
   // ── Match careflow rules ───────────────────────────────────────────────────
   const fieldSelections = visit.fieldSelections
