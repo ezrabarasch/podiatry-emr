@@ -35,7 +35,7 @@ interface Patient {
   lastName: string
   dob: string
   facilityType: string
-  facility: { name: string }
+  facility: { name: string; practice?: { name: string } | null }
   pccPatientId: string | null
   roomNumber: string | null
   admissionDate: string | null
@@ -50,15 +50,17 @@ interface Patient {
   coverages: Coverage[]
   // Summary only — the tabs page their own data.
   diagnoses: { syncedAt: string }[]
-  visits: { visitDate: string; visitType: string; status: string }[]
+  visits: { visitDate: string; visitType: string | null; status: string }[]
   _count: { visits: number; diagnoses: number }
   signedVisitCount: number
+  availableServiceTypes: string[]
 }
 
 interface Visit {
   id: string
   visitDate: string
-  visitType: string
+  visitType: string | null
+  careflowType: string
   status: string
   provider: { firstName: string; lastName: string; credentials: string | null }
   note: { cptCodes: Array<{ code: string }> } | null
@@ -192,6 +194,7 @@ const fmt = (d: string | null) =>
 const calcAge = (dob: string) =>
   Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
 const VISIT_TYPE: Record<string, string> = { new_patient: 'New patient', established: 'Established' }
+const humanizeCareflowType = (t: string) => t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 const initials = (p: Patient) => `${p.firstName[0] ?? ''}${p.lastName[0] ?? ''}`.toUpperCase()
 const fmtSize = (b: number) => (b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`)
 
@@ -247,6 +250,8 @@ export default function PatientPage() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [showServiceTypeMenu, setShowServiceTypeMenu] = useState(false)
+  const [serviceTypeNotice, setServiceTypeNotice] = useState('')
   const [tab, setTab] = useState<Tab>('Visits')
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -287,11 +292,37 @@ export default function PatientPage() {
   const role = session?.user?.role
   const canEdit = role === 'PROVIDER' || role === 'ADMIN'
 
-  const handleNewVisit = async () => {
+  const createVisit = async (careflowType: string) => {
+    setShowServiceTypeMenu(false)
+    setServiceTypeNotice('')
     setCreating(true)
-    const res = await fetch(`/api/patients/${patientId}/visits`, { method: 'POST' })
+    const res = await fetch(`/api/patients/${patientId}/visits`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ careflowType }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setServiceTypeNotice(data.error ?? 'Failed to create visit')
+      setCreating(false)
+      return
+    }
     const visit = await res.json()
     router.push(`/visits/${visit.id}`)
+  }
+
+  const handleNewVisit = () => {
+    setServiceTypeNotice('')
+    const types = patient?.availableServiceTypes ?? []
+    if (types.length === 0) {
+      setServiceTypeNotice("No service types available — assign a practice with service types to this patient's facility first.")
+      return
+    }
+    if (types.length === 1) {
+      createVisit(types[0])
+      return
+    }
+    setShowServiceTypeMenu(v => !v)
   }
 
   const handleUpload = async (file: File) => {
@@ -323,9 +354,9 @@ export default function PatientPage() {
 
   const visitColumns: Column<Visit>[] = [
     { key: 'date', label: 'Date of Service', render: v => <span className="font-medium text-text">{fmt(v.visitDate)}</span> },
-    { key: 'practice', label: 'Practice', render: () => <span className="text-text-muted">Q-Med Podiatry</span> },
-    { key: 'service', label: 'Service', render: () => <span className="text-text-muted">Podiatry</span> },
-    { key: 'type', label: 'Visit Type', render: v => <span className="text-text-muted">{VISIT_TYPE[v.visitType] ?? v.visitType}</span> },
+    { key: 'practice', label: 'Practice', render: () => <span className="text-text-muted">{patient.facility.practice?.name ?? '—'}</span> },
+    { key: 'service', label: 'Service', render: v => <span className="text-text-muted">{v.careflowType ? humanizeCareflowType(v.careflowType) : '—'}</span> },
+    { key: 'type', label: 'Visit Type', render: v => <span className="text-text-muted">{v.visitType ? (VISIT_TYPE[v.visitType] ?? v.visitType) : '—'}</span> },
     { key: 'provider', label: 'Provider', render: v => (
       <span className="text-text-muted">{v.provider.firstName} {v.provider.lastName}{v.provider.credentials ? `, ${v.provider.credentials}` : ''}</span>
     ) },
@@ -455,9 +486,31 @@ export default function PatientPage() {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <Button variant="secondary" onClick={() => window.print()}>Export PDF</Button>
-            {canEdit && <Button onClick={handleNewVisit} loading={creating}>+ New Visit</Button>}
+            {canEdit && (
+              <div className="relative">
+                <Button onClick={handleNewVisit} loading={creating}>+ New Visit</Button>
+                {showServiceTypeMenu && (
+                  <div className="absolute right-0 mt-1 w-56 bg-white rounded-lg border border-slate-200 shadow-lg z-10 overflow-hidden">
+                    {(patient.availableServiceTypes ?? []).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => createVisit(t)}
+                        className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+                      >
+                        {humanizeCareflowType(t)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
+        {serviceTypeNotice && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">
+            {serviceTypeNotice}
+          </p>
+        )}
       </Card>
 
       {/* Stats row */}
@@ -472,7 +525,11 @@ export default function PatientPage() {
             <div className="flex-1 p-4">
               <p className="text-xs font-medium text-text-muted uppercase tracking-wide">Last Visit</p>
               <p className="text-lg font-semibold text-text mt-1">{lastVisit ? fmt(lastVisit.visitDate) : '—'}</p>
-              <p className="text-xs text-text-muted mt-0.5">{lastVisit ? `${VISIT_TYPE[lastVisit.visitType] ?? lastVisit.visitType} · ${lastVisit.status === 'signed' ? 'Signed' : 'Draft'}` : 'No visits yet'}</p>
+              <p className="text-xs text-text-muted mt-0.5">
+                {lastVisit
+                  ? `${lastVisit.visitType ? VISIT_TYPE[lastVisit.visitType] ?? lastVisit.visitType : 'Type not set'} · ${lastVisit.status === 'signed' ? 'Signed' : 'Draft'}`
+                  : 'No visits yet'}
+              </p>
             </div>
           </div>
         </Card>

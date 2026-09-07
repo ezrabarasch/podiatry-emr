@@ -22,7 +22,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   const { id } = await context.params
   const b = await req.json()
 
-  const data: Prisma.FacilityUpdateInput = {}
+  const data: Prisma.FacilityUncheckedUpdateInput = {}
   if (b.name !== undefined) {
     if (!b.name.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     data.name = b.name.trim()
@@ -32,6 +32,10 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: 'Invalid facility type' }, { status: 400 })
     }
     data.facilityType = b.facilityType
+  }
+  if (b.practiceId !== undefined) {
+    if (!b.practiceId?.trim()) return NextResponse.json({ error: 'Practice is required' }, { status: 400 })
+    data.practiceId = b.practiceId.trim()
   }
   if (b.address !== undefined) data.address = trimOrNull(b.address)
   if (b.npi !== undefined) data.npi = trimOrNull(b.npi)
@@ -49,8 +53,9 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     const facility = await prisma.facility.update({ where: { id }, data })
     return NextResponse.json(facility)
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
-      return NextResponse.json({ error: 'Facility not found' }, { status: 404 })
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === 'P2025') return NextResponse.json({ error: 'Facility not found' }, { status: 404 })
+      if (e.code === 'P2003') return NextResponse.json({ error: 'Invalid practice' }, { status: 400 })
     }
     throw e
   }

@@ -84,13 +84,69 @@ model Facility {
   donContactName    String?
   donContactPhone   String?
   donContactEmail   String?
+  practiceId    String?      // nullable — existing facilities predate Practice
   active        Boolean      @default(true)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
+  practice      Practice?    @relation(fields: [practiceId], references: [id])
   patients      Patient[]
 
   @@map("facilities")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRACTICES — offer a subset of available service types (CareflowType)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Practice {
+  id           String                 @id @default(uuid())
+  name         String
+  tin          String?
+  groupNpi     String?
+  address      String?
+  phone        String?
+  email        String?
+  active       Boolean                @default(true)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  facilities   Facility[]
+  providers    ProviderPractice[]
+  serviceTypes PracticeServiceType[]
+
+  @@map("practices")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROVIDER <-> PRACTICE — many-to-many
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ProviderPractice {
+  id         String   @id @default(uuid())
+  userId     String
+  practiceId String
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, practiceId])
+  @@map("provider_practices")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRACTICE <-> CAREFLOW TYPE — the subset of service types a practice offers
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PracticeServiceType {
+  id           String       @id @default(uuid())
+  practiceId   String
+  careflowType CareflowType
+
+  practice     Practice     @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, careflowType])
+  @@map("practice_service_types")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,6 +166,11 @@ model User {
   lockedAt            DateTime?
   lastLoginAt         DateTime?
   currentSessionToken String?   // single-device enforcement
+  npi                 String?
+  licenseNumber       String?
+  specialty           String?
+  address             String?
+  phone               String?
   active              Boolean   @default(true)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -117,6 +178,7 @@ model User {
   visits              Visit[]
   sessionLogs         SessionLog[]
   patientUploads      PatientUpload[]
+  practices           ProviderPractice[]
 
   @@map("users")
 }
@@ -282,7 +344,7 @@ model Visit {
   patientId      String
   providerId     String
   visitDate      DateTime
-  visitType      VisitType
+  visitType      VisitType?
   facilityType   FacilityType   // snapshotted from patient at time of visit creation
   placeOfService PlaceOfService?
   careflowType   CareflowType   @default(at_risk_podiatry)

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { FacilityType } from '@prisma/client'
+import { FacilityType, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 
@@ -22,22 +22,31 @@ export async function POST(req: Request) {
   if (!Object.values(FacilityType).includes(b.facilityType)) {
     return NextResponse.json({ error: 'Invalid facility type' }, { status: 400 })
   }
+  if (!b.practiceId?.trim()) return NextResponse.json({ error: 'Practice is required' }, { status: 400 })
 
-  const facility = await prisma.facility.create({
-    data: {
-      name: b.name.trim(),
-      facilityType: b.facilityType,
-      address: trimOrNull(b.address),
-      npi: trimOrNull(b.npi),
-      posCode: trimOrNull(b.posCode),
-      pccFacilityId: trimOrNull(b.pccFacilityId),
-      adminContactName: trimOrNull(b.adminContactName),
-      adminContactPhone: trimOrNull(b.adminContactPhone),
-      adminContactEmail: trimOrNull(b.adminContactEmail),
-      donContactName: trimOrNull(b.donContactName),
-      donContactPhone: trimOrNull(b.donContactPhone),
-      donContactEmail: trimOrNull(b.donContactEmail),
-    },
-  })
-  return NextResponse.json(facility)
+  try {
+    const facility = await prisma.facility.create({
+      data: {
+        name: b.name.trim(),
+        facilityType: b.facilityType,
+        practiceId: b.practiceId.trim(),
+        address: trimOrNull(b.address),
+        npi: trimOrNull(b.npi),
+        posCode: trimOrNull(b.posCode),
+        pccFacilityId: trimOrNull(b.pccFacilityId),
+        adminContactName: trimOrNull(b.adminContactName),
+        adminContactPhone: trimOrNull(b.adminContactPhone),
+        adminContactEmail: trimOrNull(b.adminContactEmail),
+        donContactName: trimOrNull(b.donContactName),
+        donContactPhone: trimOrNull(b.donContactPhone),
+        donContactEmail: trimOrNull(b.donContactEmail),
+      },
+    })
+    return NextResponse.json(facility)
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+      return NextResponse.json({ error: 'Invalid practice' }, { status: 400 })
+    }
+    throw e
+  }
 }

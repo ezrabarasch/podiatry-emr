@@ -16,7 +16,7 @@ import { SECTIONS, type FieldDef, type SectionDef, type CheckboxField } from '@/
 interface VisitData {
   id: string
   visitDate: string
-  visitType: string
+  visitType: string | null
   facilityType: string
   status: string
   patient: {
