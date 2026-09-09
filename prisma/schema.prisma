@@ -901,6 +901,25 @@ model IntegrationSyncConfig {
   @@map("integration_sync_configs")
 }
 
+// PCC webhook events (ADT01 group). messageId dedupes PCC redelivers; status
+// doubles as the async work queue for process_webhook_event.py. Global for
+// now, no tenantId - deferred until PCC integration itself is per-tenant.
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  messageId   String    @unique
+  eventType   String
+  patientId   String
+  facId       String
+  orgUuid     String
+  eventDate   DateTime
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  status      String    @default("received") // received | processed | failed | skipped
+  error       String?
+
+  @@map("webhook_events")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MULTI-SERVICE-LINE FOUNDATION — formally adopting tables that already exist
 // in production (hand-built matching the 60592ae design, reconciled 2026-07-29)

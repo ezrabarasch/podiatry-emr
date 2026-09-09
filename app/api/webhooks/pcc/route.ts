@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
+import { prisma } from '@/lib/prisma'
 
 // PCC sends Authorization: Basic base64(user:pass) using the credentials we
 // set on the subscription. If PCC_WEBHOOK_USER/PASS aren't configured yet,
@@ -26,6 +27,28 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   const { messageId, eventType, patientId, facId, orgUuid, eventDate } = body ?? {}
   console.log('[PCC-WEBHOOK] received:', JSON.stringify({ messageId, eventType, patientId, facId, orgUuid, eventDate }))
+
+  // Record for slice-2 processing + dedupe PCC redelivers on messageId. The
+  // ACK matters more than the record to PCC's retry logic, so this never
+  // blocks the 200 - a DB hiccup here just means a redeliver reprocesses it.
+  if (messageId) {
+    try {
+      await prisma.webhookEvent.upsert({
+        where: { messageId },
+        create: {
+          messageId,
+          eventType: eventType ?? 'unknown',
+          patientId: String(patientId ?? ''),
+          facId: String(facId ?? ''),
+          orgUuid: orgUuid ?? '',
+          eventDate: eventDate ? new Date(eventDate) : new Date(),
+        },
+        update: {},
+      })
+    } catch (err) {
+      console.error('[PCC-WEBHOOK] failed to record event', err)
+    }
+  }
 
   return NextResponse.json({ received: true }, { status: 200 })
 }

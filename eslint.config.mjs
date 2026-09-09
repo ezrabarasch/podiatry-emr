@@ -18,11 +18,14 @@ const eslintConfig = defineConfig([
   // The bare Prisma singleton bypasses tenant/practice scoping entirely — every
   // route must get its client from getSessionUser()/requireRole() instead
   // (lib/scopedPrisma.ts). Allowlist: the factory (needs the base client to
-  // extend) and lib/auth.ts (its pre-session login/audit queries run before any
-  // tenant context exists, so they can't go through the scoped client).
+  // extend), lib/auth.ts (its pre-session login/audit queries run before any
+  // tenant context exists, so they can't go through the scoped client), and the
+  // PCC webhook receiver (PCC calls it directly with Basic auth — there is no
+  // NextAuth session to build a scoped client from, and WebhookEvent isn't a
+  // tenant-scoped model in the first place).
   {
     files: ["app/**/*.{ts,tsx}", "lib/**/*.{ts,tsx}"],
-    ignores: ["lib/prisma.ts", "lib/scopedPrisma.ts", "lib/auth.ts"],
+    ignores: ["lib/prisma.ts", "lib/scopedPrisma.ts", "lib/auth.ts", "app/api/webhooks/pcc/route.ts"],
     rules: {
       "no-restricted-imports": ["error", {
         paths: [{
