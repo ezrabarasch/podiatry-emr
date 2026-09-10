@@ -1,10 +1,17 @@
 #!/usr/bin/env node
-// PCC webhook event poller (slice-2 automation, staging only). Finds
-// webhook_events rows with status='received' and invokes
-// process_webhook_event.py per row - the processor itself marks each row
+// PCC webhook event poller. Finds webhook_events rows with status='received'
+// and invokes the processor per row - the processor itself marks each row
 // processed/failed/skipped, so this script only has to find work and shell
 // out to it. Mirrors sync-scheduler.js's Node-decides -> execSync-into-Python
 // -> log pattern; see that file for the sibling PCC-sync version of this.
+//
+// One script, two environments: WEBHOOK_PROCESSOR_SCRIPT picks which
+// processor to invoke (the staging variant, which overrides its own
+// DATABASE_URL to emr-staging, or the prod variant, which is tenancy-free -
+// no such column on prod's Patient/Facility). Each environment's own pm2
+// process sets this; running from a given checkout already gets Prisma's
+// matching .env auto-loaded for the webhook_events query itself, same as
+// sync-scheduler.js does for its own DB.
 //
 // ponytail: DELIBERATELY NOT a one-shot-under-pm2-cron_restart script like
 // sync-scheduler.js. That works fine at an hourly cadence, but its
@@ -24,7 +31,7 @@ const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
 const PYTHON = '/home/dbcreator/pcc/.venv/bin/python'
-const SCRIPT = '/home/dbcreator/pcc/process_webhook_event.py'
+const SCRIPT = process.env.WEBHOOK_PROCESSOR_SCRIPT || '/home/dbcreator/pcc/process_webhook_event.py'
 const POLL_INTERVAL_MS = 30 * 1000
 
 let running = false
@@ -60,6 +67,6 @@ async function tick() {
   }
 }
 
-console.log(`[${new Date().toISOString()}] webhook-poller started, polling every ${POLL_INTERVAL_MS / 1000}s`)
+console.log(`[${new Date().toISOString()}] webhook-poller started, polling every ${POLL_INTERVAL_MS / 1000}s, processor=${SCRIPT}`)
 tick().catch(e => console.error(e))
 setInterval(() => { tick().catch(e => console.error(e)) }, POLL_INTERVAL_MS)
