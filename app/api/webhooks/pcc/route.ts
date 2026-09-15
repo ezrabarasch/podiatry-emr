@@ -25,12 +25,16 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}))
-  const { messageId, eventType, patientId, facId, orgUuid, eventDate } = body ?? {}
-  console.log('[PCC-WEBHOOK] received:', JSON.stringify({ messageId, eventType, patientId, facId, orgUuid, eventDate }))
+  const { messageId, eventType, patientId, facId, orgUuid, eventDate, messageDate, resourceId } = body ?? {}
+  console.log('[PCC-WEBHOOK] received:', JSON.stringify({ messageId, eventType, patientId, facId, orgUuid, eventDate, messageDate, resourceId }))
 
   // Record for slice-2 processing + dedupe PCC redelivers on messageId. The
   // ACK matters more than the record to PCC's retry logic, so this never
   // blocks the 200 - a DB hiccup here just means a redeliver reprocesses it.
+  // messageDate/resourceId: PCC's own payload docs list these alongside the
+  // fields already captured - resourceId in particular is documented as how
+  // PCC identifies which sub-resource (e.g. which medication order) changed
+  // for event groups beyond ADT01, so it needs to reach the processor.
   if (messageId) {
     try {
       await prisma.webhookEvent.upsert({
@@ -42,6 +46,8 @@ export async function POST(req: Request) {
           facId: String(facId ?? ''),
           orgUuid: orgUuid ?? '',
           eventDate: eventDate ? new Date(eventDate) : new Date(),
+          messageDate: messageDate ? new Date(messageDate) : null,
+          resourceId: resourceId ? JSON.stringify(resourceId) : null,
         },
         update: {},
       })
