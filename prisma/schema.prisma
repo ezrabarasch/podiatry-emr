@@ -912,6 +912,8 @@ model WebhookEvent {
   facId       String
   orgUuid     String
   eventDate   DateTime
+  messageDate DateTime? // when PCC generated the notification (distinct from eventDate)
+  resourceId  String?   // JSON-encoded array, e.g. "[23984]" - PCC only documents this for MED02
   receivedAt  DateTime  @default(now())
   processedAt DateTime?
   status      String    @default("received") // received | processed | failed | skipped
