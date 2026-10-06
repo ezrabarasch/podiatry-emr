@@ -64,6 +64,11 @@ def _pick(benefits, code, amount_key, services, prefer_part_b):
     return _amount(best, amount_key) if best else None
 
 
+def _pct(fraction):
+    # Stedi sends coinsurance as a decimal fraction ("0.80" = 80%).
+    return None if fraction is None else round(fraction * 100, 2)
+
+
 def summarize(resp):
     """Flat dict for storage/UI. outcome: active | inactive | error | unknown."""
     benefits = resp.get("benefitsInformation") or []
@@ -91,7 +96,7 @@ def summarize(resp):
                            or dates.get("benefit")),
         "plan_end": _iso(dates.get("planEnd") or dates.get("eligibilityEnd") or dates.get("policyExpiration")),
         "copay": _pick(benefits, "B", "benefitAmount", COPAY_SERVICE_PREFERENCE, payer_is_cms),
-        "coinsurance_pct": _pick(benefits, "A", "benefitPercent", COPAY_SERVICE_PREFERENCE, payer_is_cms),
+        "coinsurance_pct": _pct(_pick(benefits, "A", "benefitPercent", COPAY_SERVICE_PREFERENCE, payer_is_cms)),
         "deductible": _pick(benefits, "C", "benefitAmount", ("30",), payer_is_cms),
         "errors": errors,
         "application_mode": (resp.get("meta") or {}).get("applicationMode"),

@@ -23,7 +23,7 @@ MEDICARE = {
          "timeQualifierCode": "26", "inPlanNetworkIndicatorCode": "W"},
         {"code": "C", "serviceTypeCodes": ["30"], "planCoverage": "Medicare Part B", "benefitAmount": "240",
          "timeQualifierCode": "23", "inPlanNetworkIndicatorCode": "W"},
-        {"code": "A", "serviceTypeCodes": ["30"], "planCoverage": "Medicare Part B", "benefitPercent": "20",
+        {"code": "A", "serviceTypeCodes": ["30"], "planCoverage": "Medicare Part B", "benefitPercent": "0.2",
          "inPlanNetworkIndicatorCode": "W"},
     ],
 }

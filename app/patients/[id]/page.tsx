@@ -9,7 +9,7 @@ import Badge from '@/app/components/Badge'
 import Button from '@/app/components/Button'
 import Table, { type Column } from '@/app/components/Table'
 import Pagination, { usePaged } from '@/app/components/Pagination'
-import EligibilityCard from './EligibilityCard'
+import EligibilityTab from './EligibilityTab'
 
 interface Coverage {
   id: string
@@ -214,7 +214,7 @@ const MAX_ALLERGY_TAGS = 5
 const emptyText = (loading: boolean, text: string) => (loading ? 'Loading...' : text)
 
 const TABS = [
-  'Visits', 'Admissions', 'Diagnoses', 'Vitals', 'Demos', 'Insurance',
+  'Visits', 'Admissions', 'Diagnoses', 'Vitals', 'Demos', 'Insurance', 'Eligibility',
   'Providers', 'Medications', 'Immunizations', 'Reports', 'Care Plans',
   'Therapy', 'Uploads', 'Notes',
 ] as const
@@ -671,8 +671,6 @@ export default function PatientPage() {
         </div>
       )}
 
-      {tab === 'Insurance' && <div className="mb-4"><EligibilityCard patientId={patient.id} /></div>}
-
       {tab === 'Insurance' && (
         patient.coverages.length === 0 ? (
           <Card><p className="text-center text-text-muted text-sm py-6">No insurance records on file</p></Card>
@@ -699,6 +697,8 @@ export default function PatientPage() {
           </div>
         )
       )}
+
+      {tab === 'Eligibility' && <EligibilityTab patientId={patient.id} />}
 
       {tab === 'Providers' && (
         <>
