@@ -24,7 +24,7 @@ from .payers import resolve
 POLL_SECONDS = 5
 
 CLAIM_SQL = """
-UPDATE stedi_eligibility_checks SET status = 'processing', "startedAt" = now()
+UPDATE stedi_eligibility_checks SET status = 'processing', "startedAt" = clock_timestamp()
 WHERE id = (SELECT id FROM stedi_eligibility_checks WHERE status = 'pending'
             ORDER BY "requestedAt" FOR UPDATE SKIP LOCKED LIMIT 1)
 RETURNING id, "patientId"
@@ -51,7 +51,7 @@ def member_id_for(coverage, patient):
 
 
 def finish(cur, check_id, status, message=None, **cols):
-    sets = ['status = %s', '"completedAt" = now()', 'message = %s']
+    sets = ['status = %s', '"completedAt" = clock_timestamp()', 'message = %s']
     vals = [status, message]
     for k, v in cols.items():
         sets.append(f'"{k}" = %s')
