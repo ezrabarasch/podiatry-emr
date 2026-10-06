@@ -40,6 +40,7 @@ export interface EligibilityDetail {
     serviceTypeCodes: string[]; otherDates: { label: string; date: string }[]
   }
   subscriber: { memberId: string | null; firstName: string | null; lastName: string | null; dob: string | null; gender: string | null }
+  dependents: { firstName: string | null; lastName: string | null; dob: string | null; gender: string | null; relation: string | null; planNumber: string | null }[]
   groups: BenefitGroup[]
   errors: PayerError[]
 }
@@ -161,6 +162,10 @@ export function buildDetail(raw: Raw, outcome: string): EligibilityDetail {
       memberId: str(sub.memberId), firstName: str(sub.firstName), lastName: str(sub.lastName),
       dob: isoDate(sub.dateOfBirth), gender: str(sub.gender),
     },
+    dependents: (raw.dependents ?? []).map((d: Raw) => ({
+      firstName: str(d.firstName), lastName: str(d.lastName), dob: isoDate(d.dateOfBirth),
+      gender: str(d.gender), relation: str(d.relationToSubscriber), planNumber: str(d.planNumber),
+    })),
     groups: groups.filter(g => g.rows.in.length + g.rows.out.length + g.rows.other.length > 0),
     errors: collectErrors(raw),
   }

@@ -218,6 +218,19 @@ export default function EligibilityTab({ patientId }: { patientId: string }) {
             </Card>
           </div>
 
+          {d.dependents.map((dep, i) => (
+            <Card key={i}>
+              <h3 className="text-sm font-semibold text-text mb-3">Dependent (patient is covered as a dependent)</h3>
+              <dl className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <Field label="First name" value={dep.firstName} />
+                <Field label="Last name" value={dep.lastName} />
+                <Field label="Date of birth" value={dep.dob} />
+                <Field label="Gender" value={dep.gender} />
+                <Field label="Relation to subscriber" value={dep.relation} />
+              </dl>
+            </Card>
+          ))}
+
           <Card>
             <h3 className="text-sm font-semibold text-text mb-3">Benefits</h3>
             {d.groups.length === 0

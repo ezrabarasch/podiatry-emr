@@ -82,6 +82,15 @@ assert.strictEqual(bad.errors[1].code, '15')
 assert.strictEqual(bad.header.applicationMode, 'production')
 assert.strictEqual(bad.groups.length, 0)
 
+// a dependent's identity comes back under dependents[], not subscriber
+const dep = buildDetail({
+  subscriber: { memberId: 'M1', firstName: 'John', lastName: 'Doe' },
+  dependents: [{ firstName: 'Jordan', lastName: 'Doe', dateOfBirth: '20010714', gender: 'F', relationToSubscriber: 'Child' }],
+}, 'active')
+assert.strictEqual(dep.subscriber.dob, null)
+assert.deepStrictEqual(dep.dependents, [{ firstName: 'Jordan', lastName: 'Doe', dob: '2001-07-14', gender: 'F', relation: 'Child', planNumber: null }])
+assert.deepStrictEqual(buildDetail({}, 'unknown').dependents, [])
+
 // empty / sparse responses never throw
 assert.doesNotThrow(() => buildDetail({}, 'unknown'))
 
