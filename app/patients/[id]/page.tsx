@@ -9,6 +9,7 @@ import Badge from '@/app/components/Badge'
 import Button from '@/app/components/Button'
 import Table, { type Column } from '@/app/components/Table'
 import Pagination, { usePaged } from '@/app/components/Pagination'
+import EligibilityCard from './EligibilityCard'
 
 interface Coverage {
   id: string
@@ -669,6 +670,8 @@ export default function PatientPage() {
           </Card>
         </div>
       )}
+
+      {tab === 'Insurance' && <div className="mb-4"><EligibilityCard patientId={patient.id} /></div>}
 
       {tab === 'Insurance' && (
         patient.coverages.length === 0 ? (

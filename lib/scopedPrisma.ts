@@ -51,6 +51,7 @@ const EXEMPT_MODELS = new Set([
   'CareflowSection',
   'CareflowFieldGroup',
   'CareflowField',
+  'StediPayerMap',
 ])
 
 // Patient-child models: no tenantId of their own, reached only via patientId.
@@ -76,6 +77,7 @@ const PATIENT_CHILD_MODELS = new Set([
   'PatientAssessment',
   'PatientEpisodeOfCare',
   'PatientTherapyTrack',
+  'StediEligibilityCheck',
 ])
 
 // groupBy is included alongside the task's original findMany/findFirst/

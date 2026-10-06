@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { pageParams } from '@/lib/pagination'
+import { enqueueEligibility } from '@/lib/stedi'
 
 export async function GET(
   req: Request,
@@ -77,6 +78,9 @@ export async function POST(
       tenantId: user.tenantId,
     },
   })
+
+  // Fire-and-forget: a failed enqueue must never fail visit creation.
+  await enqueueEligibility(prisma, patient.id, visit.id).catch(e => console.error('eligibility enqueue failed', e))
 
   return NextResponse.json(visit)
 }

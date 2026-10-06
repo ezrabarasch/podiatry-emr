@@ -323,6 +323,7 @@ model Patient {
   carePlans         PatientCarePlan[]
   assessments       PatientAssessment[]
   episodesOfCare    PatientEpisodeOfCare[]
+  stediChecks       StediEligibilityCheck[]
   therapyTracks     PatientTherapyTrack[]
 
   @@index([tenantId])
@@ -983,4 +984,42 @@ model CareflowField {
   group      CareflowFieldGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@map("careflow_fields")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEDI ELIGIBILITY — async queue: the app inserts 'pending', etl/stedi/worker.py
+// does the Stedi call and fills in the rest. Patient-child (no tenantId); no FK
+// to coverages/visits because the PCC sync deletes and recreates coverage rows.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model StediEligibilityCheck {
+  id              String    @id @default(uuid())
+  patientId       String
+  visitId         String?
+  coverageId      String?
+  status          String    @default("pending") // pending | processing | done | error | needs_review
+  outcome         String?   // active | inactive | error | unknown
+  payerId         String?
+  message         String?
+  summary         Json?
+  rawResponse     Json?
+  latencyMs       Int?
+  applicationMode String?
+  requestedAt     DateTime  @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+
+  patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, requestedAt])
+  @@index([status])
+  @@map("stedi_eligibility_checks")
+}
+
+model StediPayerMap {
+  labelKey     String @id
+  stediPayerId String
+  displayName  String
+
+  @@map("stedi_payer_map")
 }
