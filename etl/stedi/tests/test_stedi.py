@@ -1,5 +1,7 @@
 """Run: python -m unittest etl.stedi.tests.test_stedi -v   (from the repo root; no network, no DB)."""
 import datetime
+import pathlib
+import re
 import unittest
 from unittest import mock
 
@@ -8,7 +10,7 @@ import requests
 from etl.stedi import client as sc
 from etl.stedi.eligibility import build_request, summarize
 from etl.stedi.payers import normalize, resolve
-from etl.stedi.worker import member_id_for, pick_coverage
+from etl.stedi.worker import member_id_for, pick_coverage, write_patient_data_enabled
 
 # Shapes condensed from real Stedi test-mode responses (2026-10-06).
 MEDICARE = {
@@ -118,6 +120,27 @@ class PayerAndCoverageTests(unittest.TestCase):
         self.assertEqual(member_id_for({"payerType": "MEDICAID", "memberId": None}, p), "MCD1")
         self.assertEqual(member_id_for({"payerType": "MEDICAID", "memberId": "COV"}, p), "COV")
         self.assertIsNone(member_id_for({"payerType": "COMMERCIAL", "memberId": None}, p))
+
+
+class DataAuthorityTests(unittest.TestCase):
+    """PCC is authoritative: Stedi code may read PCC tables but only write stedi_* tables."""
+
+    def test_flag_defaults_off(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertFalse(write_patient_data_enabled())
+        for v, want in (("false", False), ("", False), ("TRUE", True), (" true ", True)):
+            with mock.patch.dict("os.environ", {"STEDI_WRITE_PATIENT_DATA": v}, clear=True):
+                self.assertEqual(write_patient_data_enabled(), want, v)
+
+    def test_stedi_code_only_writes_stedi_tables(self):
+        pkg = pathlib.Path(__file__).resolve().parents[1]
+        writes = []
+        for f in pkg.glob("*.py"):
+            src = f.read_text(encoding="utf-8")
+            # "FOR UPDATE" is a row lock, not a write.
+            writes += re.findall(r"(?<!FOR )\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+\"?(\w+)", src, re.I)
+        self.assertTrue(writes, "scan found no writes - regex is broken")
+        self.assertEqual([t for t in writes if not t.startswith("stedi_")], [])
 
 
 class ClientTests(unittest.TestCase):

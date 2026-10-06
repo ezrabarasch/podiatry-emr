@@ -31,6 +31,16 @@ RETURNING id, "patientId"
 """
 
 
+def write_patient_data_enabled():
+    """PCC is the source of truth. Stedi results stay in stedi_* tables unless this is on.
+
+    ponytail: the flag is read and reported but gates nothing yet - the
+    controlled path that copies Stedi data into PCC-managed fields is not built.
+    test_stedi_code_only_writes_stedi_tables fails if any write appears outside stedi_*.
+    """
+    return os.environ.get("STEDI_WRITE_PATIENT_DATA", "false").strip().lower() == "true"
+
+
 def _gender(g):
     g = (g or "").strip().upper()[:1]
     return g if g in ("M", "F") else None
@@ -129,7 +139,10 @@ def main():
     conn.commit()
     if not npi:
         print("WARNING: STEDI_PROVIDER_NPI is empty; checks will fail validation", file=sys.stderr)
-    print(f"stedi worker started (poll {POLL_SECONDS}s)", flush=True)
+    if write_patient_data_enabled():
+        print("WARNING: STEDI_WRITE_PATIENT_DATA=true but no patient-data write path exists yet; "
+              "Stedi results remain audit-only in stedi_* tables", file=sys.stderr)
+    print(f"stedi worker started (poll {POLL_SECONDS}s, writes patient data: no)", flush=True)
     while True:
         while run_one(conn, client, provider):
             pass
