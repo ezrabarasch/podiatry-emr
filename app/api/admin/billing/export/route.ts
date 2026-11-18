@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 
 // RFC-4180 escaping: wrap in quotes and double any embedded quotes. Every
@@ -54,7 +55,7 @@ export function billingVisitsQuery(weekStart: string, weekEnd: string) {
 }
 
 export async function GET(req: Request) {
-  const { prisma, error } = await requireRole(['ADMIN', 'OFFICE'])
+  const { error } = await requireRole(['ADMIN', 'OFFICE'])
   if (error) return error
 
   const { searchParams } = new URL(req.url)

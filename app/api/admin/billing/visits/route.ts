@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 import { billingVisitsQuery } from '../export/route'
 
 // One object per visit (not per CPT code) - backs the "View Details" modal,
 // which lists visits, unlike the export's one-row-per-CPT-code CSV.
 export async function GET(req: Request) {
-  const { prisma, error } = await requireRole(['ADMIN', 'OFFICE'])
+  const { error } = await requireRole(['ADMIN', 'OFFICE'])
   if (error) return error
 
   const { searchParams } = new URL(req.url)
