@@ -259,6 +259,9 @@ model PatientDiagnosis {
   patientId             String
   icd10                 String
   description           String
+  // From PCC /conditions rankDescription / classificationDescription.
+  rank                  String?  // "Primary", "Secondary", "Diagnosis #3", ...
+  classification        String?  // e.g. "Admission"
   firstAssertedAt       DateTime @default(now())
   lastConfirmedAt       DateTime @default(now())
   // Renamed from lastConfirmedById - holds a visitId, not a person id.

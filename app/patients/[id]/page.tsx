@@ -25,6 +25,8 @@ interface Diagnosis {
   id: string
   icd10: string
   description: string
+  rank: string | null
+  classification: string | null
   active: boolean
   syncedAt: string
 }
@@ -603,15 +605,26 @@ export default function PatientPage() {
             {diagnoses.rows.length === 0 ? (
               <div className="p-8 text-center text-text-muted text-sm">{emptyText(diagnoses.loading, 'No diagnoses on file')}</div>
             ) : (
-              <ul>
-                {diagnoses.rows.map(d => (
-                  <li key={d.id} className="flex items-center gap-4 px-5 py-3 border-b border-[#F1F5F9] last:border-0">
-                    <span className="font-mono text-xs font-semibold px-2 py-1 rounded bg-[#DBEAFE] text-[#1D4ED8]">{d.icd10}</span>
-                    <span className="flex-1 text-sm text-text">{d.description}</span>
-                    <Badge variant={d.active ? 'active' : 'inactive'} label={d.active ? 'Active' : 'Inactive'} />
-                  </li>
-                ))}
-              </ul>
+              <>
+                <div className="flex items-center gap-4 px-5 py-3 border-b border-border bg-[#F8FAFC] text-[10px] font-semibold text-[#64748B] uppercase tracking-wide">
+                  <span className="w-20 shrink-0">ICD-10</span>
+                  <span className="flex-1">Description</span>
+                  <span className="w-28 shrink-0">Rank</span>
+                  <span className="w-28 shrink-0">Classification</span>
+                  <span className="w-20 shrink-0">Status</span>
+                </div>
+                <ul>
+                  {diagnoses.rows.map(d => (
+                    <li key={d.id} className="flex items-center gap-4 px-5 py-3 border-b border-[#F1F5F9] last:border-0">
+                      <span className="w-20 shrink-0"><span className="font-mono text-xs font-semibold px-2 py-1 rounded bg-[#DBEAFE] text-[#1D4ED8]">{d.icd10}</span></span>
+                      <span className="flex-1 text-sm text-text">{d.description}</span>
+                      <span className="w-28 shrink-0 text-sm text-text">{d.rank ?? '—'}</span>
+                      <span className="w-28 shrink-0 text-sm text-text">{d.classification ?? '—'}</span>
+                      <span className="w-20 shrink-0"><Badge variant={d.active ? 'active' : 'inactive'} label={d.active ? 'Active' : 'Inactive'} /></span>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </Card>
           <Pagination {...diagnoses} onPageChange={diagnoses.setPage} onLimitChange={diagnoses.setLimit} unit="diagnoses" />
