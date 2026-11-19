@@ -179,6 +179,8 @@ model User {
   sessionLogs         SessionLog[]
   patientUploads      PatientUpload[]
   practices           ProviderPractice[]
+  claimEvents         ClaimEvent[]
+  claimNotes          ClaimNote[]
 
   @@map("users")
 }
@@ -246,6 +248,7 @@ model Patient {
   assessments       PatientAssessment[]
   episodesOfCare    PatientEpisodeOfCare[]
   stediChecks       StediEligibilityCheck[]
+  claims            Claim[]
   therapyTracks     PatientTherapyTrack[]
 
   @@map("patients")
@@ -363,6 +366,7 @@ model Visit {
   emrImport      VisitEmrImport?
   fieldSelections VisitFieldSelection[]
   note           VisitNote?
+  claims         Claim[]
   diagnosisAssertions        PatientDiagnosisAssertion[]
   medicationAssertions       PatientMedicationAssertion[]
   lastAssertedForDiagnoses   PatientDiagnosis[]  @relation("DiagnosisLastAssertedBy")
@@ -940,4 +944,151 @@ model StediPayerMap {
   displayName  String
 
   @@map("stedi_payer_map")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BILLING CLAIMS (phase 1) — professional claims (837P) submitted via Stedi.
+// One Visit can have several Claims (original + resubmissions/appeals, linked by
+// parentClaimId). Status follows the real clearinghouse lifecycle (277CA + 835).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ClaimStatus {
+  Draft
+  Ready
+  Submitted
+  Accepted
+  Rejected
+  AwaitingPayment
+  Denied
+  Appealed
+  PartialPaidPending
+  FullPaidClosed
+  PartialPaidClosed
+  Void
+}
+
+enum ClaimEventType {
+  Submitted
+  Acknowledged
+  Accepted
+  Rejected
+  ERAReceived
+  Resubmitted
+  Appealed
+  Voided
+  WrittenOff
+  NoteAdded
+}
+
+model Claim {
+  id                    String      @id @default(uuid())
+  visitId               String
+  patientId             String      // denormalized for query performance
+  patientControlNumber  String      @unique @db.VarChar(20) // QMD-YYYY-NNNN; the claim id sent to Stedi
+  stediCorrelationId    String?     @db.VarChar(100)
+  status                ClaimStatus @default(Draft)
+  payerId               String?     @db.VarChar(50)  // Stedi payer id (tradingPartnerServiceId)
+  payerName             String?     @db.VarChar(200)
+  totalCharges          Decimal     @default(0) @db.Decimal(12, 2)
+  totalAllowed          Decimal?    @db.Decimal(12, 2) // from ERA
+  totalPaid             Decimal?    @db.Decimal(12, 2) // from ERA
+  totalAdjustment       Decimal?    @db.Decimal(12, 2) // from ERA (contractual)
+  patientResponsibility Decimal?    @db.Decimal(12, 2) // from ERA
+  diagnoses             Json?       // snapshot: [{ pointer, icd10, description, rank }]
+  scrubErrors           Json?       // string[]; null or [] = passed scrub
+  firstScrubPassed      Boolean?    // did the first scrub pass (clean-claim rate)
+  submittedAt           DateTime?
+  acceptedAt            DateTime?
+  adjudicatedAt         DateTime?
+  deniedAt              DateTime?
+  closedAt              DateTime?
+  voidedAt              DateTime?
+  voidReason            String?
+  writeOffAmount        Decimal?    @db.Decimal(12, 2)
+  writeOffReason        String?
+  parentClaimId         String?
+  claimPayload          Json?       // the full JSON sent to Stedi (audit/debug)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  visit        Visit              @relation(fields: [visitId], references: [id])
+  patient      Patient            @relation(fields: [patientId], references: [id])
+  parent       Claim?             @relation("ClaimResubmissions", fields: [parentClaimId], references: [id], onDelete: SetNull)
+  children     Claim[]            @relation("ClaimResubmissions")
+  serviceLines ClaimServiceLine[]
+  events       ClaimEvent[]
+  notes        ClaimNote[]
+
+  @@index([status])
+  @@index([patientId])
+  @@index([visitId])
+  @@index([submittedAt])
+  @@map("claims")
+}
+
+model ClaimServiceLine {
+  id                    String   @id @default(uuid())
+  claimId               String
+  lineNumber            Int
+  lineControlNumber     String?  @db.VarChar(30) // sent as providerControlNumber; echoed back by the 835
+  cptCode               String   @db.VarChar(5)
+  modifiers             String[]
+  description           String
+  diagnosisPointers     String[] // ICD-10 codes for this line
+  units                 Int      @default(1)
+  chargeAmount          Decimal  @db.Decimal(10, 2)
+  allowedAmount         Decimal? @db.Decimal(10, 2) // from ERA
+  paidAmount            Decimal? @db.Decimal(10, 2) // from ERA
+  adjustmentAmount      Decimal? @db.Decimal(10, 2) // from ERA
+  adjustmentReasonCodes Json?    // [{ group, code, description, amount }] from ERA
+  remarkCodes           Json?    // [{ code, description }] from ERA
+
+  claim Claim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@unique([claimId, lineNumber])
+  @@map("claim_service_lines")
+}
+
+model ClaimEvent {
+  id                 String         @id @default(uuid())
+  claimId            String
+  eventType          ClaimEventType
+  statusCodes        Json?          // 277CA category/status codes or ERA CARC/RARC codes
+  description        String
+  rawPayload         Json?          // full Stedi response (277CA / 835 body)
+  stediCorrelationId String?        @db.VarChar(100)
+  stediEventId       String?        @db.VarChar(100) // webhook-id; idempotency for Stedi event destinations
+  createdBy          String?        // null for system events
+  createdAt          DateTime       @default(now())
+
+  claim Claim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@unique([claimId, stediEventId])
+  @@index([claimId, createdAt])
+  @@map("claim_events")
+}
+
+model ClaimNote {
+  id        String   @id @default(uuid())
+  claimId   String
+  note      String
+  createdBy String
+  createdAt DateTime @default(now())
+
+  claim Claim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [createdBy], references: [id])
+
+  @@map("claim_notes")
+}
+
+// Charge per CPT/HCPCS code. There was no fee schedule anywhere in the EMR, and a
+// claim cannot be built without line charges: scrub fails until a code has a fee.
+model FeeScheduleItem {
+  id        String   @id @default(uuid())
+  cptCode   String   @unique @db.VarChar(5)
+  amount    Decimal  @db.Decimal(10, 2)
+  updatedAt DateTime @updatedAt
+
+  @@map("fee_schedule_items")
 }
