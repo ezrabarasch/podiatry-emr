@@ -12,6 +12,7 @@ const TABS = [
   { href: '/admin/practices', label: 'Practices' },
   { href: '/admin/integrations', label: 'Integrations' },
   { href: '/admin/billing', label: 'Billing' },
+  { href: '/admin/billing/claims', label: 'Claims' },
   { href: '/admin/careflow-rules', label: 'Careflow Rules' },
   { href: '/admin/sessions', label: 'Session Log' },
 ]
@@ -22,6 +23,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession()
   const router = useRouter()
   const pathname = usePathname()
+
+  // Longest matching tab wins, so /admin/billing/claims does not also light up Billing.
+  const activeHref = TABS.filter(t => pathname.startsWith(t.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href
 
   useEffect(() => {
     if (status === 'loading') return
@@ -46,7 +50,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             key={tab.href}
             onClick={() => router.push(tab.href)}
             className={`py-3 text-sm font-medium border-b-2 transition-colors ${
-              pathname.startsWith(tab.href)
+              tab.href === activeHref
                 ? 'border-primary text-primary'
                 : 'border-transparent text-text-muted hover:text-text'
             }`}
