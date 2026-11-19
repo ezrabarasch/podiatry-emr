@@ -69,7 +69,7 @@ async function main() {
   const full = await applyEra(db, c1.id, era(c1.patientControlNumber, { paid: 60, adjustments: [{ group: 'CO', code: '45', description: 'Contractual', amount: 25 }] }), { stediEventId: 'evt-era-1' })
   assert.equal(full.status, 'FullPaidClosed')
   assert.equal((await applyEra(db, c1.id, era(c1.patientControlNumber, { paid: 60 }), { stediEventId: 'evt-era-1' })).duplicate, true)
-  const part = await applyEra(db, c2.id, era(c2.patientControlNumber, { paid: 40, adjustments: [{ group: 'CO', code: '45', description: 'Contractual', amount: 20 }] }), { stediEventId: 'evt-era-2' })
+  const part = await applyEra(db, c2.id, era(c2.patientControlNumber, { paid: 40, adjustments: [{ group: 'CO', code: '45', description: 'Contractual', amount: 20 }], lines: [{ lineControlNumber: `${c2.patientControlNumber}-L1`, procedureCode: '11721', charge: 85, paid: 40, allowed: 60, adjustments: [{ group: 'CO', code: '45', description: 'Contractual', amount: 20 }], remarks: [{ code: 'N130', description: 'Consult plan benefit documents' }] }] }), { stediEventId: 'evt-era-2' })
   assert.equal(part.status, 'PartialPaidPending')
   // c3 was rejected -> resubmit creates a linked claim; deny that one via ERA after faking its submission
   const rs = await resubmitClaim(db, c3.id, actor.id, 'resubmit')
@@ -88,7 +88,7 @@ async function main() {
   const dq = await denialQueue(db, {})
   assert.ok(dq.groups.some(x => x.code === 'CO-50'))
   const det = await claimDetail(db, c2.id)
-  assert.ok(det && det.events.length >= 3 && det.serviceLines[0].paid === 40)
+  assert.ok(det && det.events.length >= 3 && det.serviceLines[0].paid === 40 && det.serviceLines[0].remarks.length === 1)
 
   step('write-off + void rules')
   const { writeOffClaim } = await import('../lib/claims-service')
