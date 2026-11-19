@@ -52,7 +52,7 @@ async function main() {
   const after1 = await db.claim.findUniqueOrThrow({ where: { id: c1.id } })
   console.log('status after submit:', after1.status, 'correlationId:', after1.stediCorrelationId ?? '(none)')
   assert.ok(sub.ok, 'live Stedi test submission failed')
-  assert.equal(after1.status, 'Submitted'); assert.ok(after1.stediCorrelationId)
+  assert.ok(['Submitted', 'Accepted', 'AwaitingPayment'].includes(after1.status), after1.status); assert.ok(after1.stediCorrelationId) // Stedi returns an initial 277CA synchronously
   assert.equal((await submitClaim(db, c1.id, actor)).ok, false) // never sent twice
 
   // The remaining steps use fixtures so they do not depend on payer responses. Claims 2 and 3 are
