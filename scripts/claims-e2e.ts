@@ -22,7 +22,9 @@ async function main() {
   const provider = await db.user.create({ data: { username: `e2e-prov-${Date.now()}`, firstName: 'Pat', lastName: 'Foot', credentials: 'DPM', role: 'PROVIDER', password: 'x', npi: '1234567893', phone: '2035550101' } })
   actor.id = provider.id
   const patient = await db.patient.create({ data: { facilityId: facility.id, firstName: 'Test', lastName: 'Patient', dob: new Date('1940-03-02T12:00:00Z'), facilityType: 'SNF', gender: 'F' } })
-  await db.patientCoverage.create({ data: { patientId: patient.id, payerName: 'Medicare', payerType: 'MEDICARE', memberId: '1EG4TE5MK73', isPrimary: true } })
+  await db.patientCoverage.create({ data: { patientId: patient.id, payerName: 'UnitedHealthcare', payerType: 'COMMERCIAL', memberId: 'U1234567890', isPrimary: true } })
+  // Medicare (CMS) is not enabled for 837P on the Stedi account yet, so the live submit uses a payer that is (UnitedHealthcare).
+  await db.stediPayerMap.upsert({ where: { labelKey: 'unitedhealthcare' }, create: { labelKey: 'unitedhealthcare', stediPayerId: '87726', displayName: 'UnitedHealthcare' }, update: {} })
   await db.feeScheduleItem.upsert({ where: { cptCode: '11721' }, create: { cptCode: '11721', amount: 85 }, update: { amount: 85 } })
   const dates = ['2026-10-01', '2026-10-08', '2026-10-15']
   for (const d of dates) {
@@ -49,9 +51,9 @@ async function main() {
   console.log(JSON.stringify(sub).slice(0, 700))
   const after1 = await db.claim.findUniqueOrThrow({ where: { id: c1.id } })
   console.log('status after submit:', after1.status, 'correlationId:', after1.stediCorrelationId ?? '(none)')
-  if (sub.ok) assert.equal(after1.status, 'Submitted')
-  else assert.equal(after1.status, 'Ready') // a failed send must put the claim back
-  assert.equal((await submitClaim(db, c1.id, actor)).ok && sub.ok ? 'double' : 'single', 'single') // never sent twice
+  assert.ok(sub.ok, 'live Stedi test submission failed')
+  assert.equal(after1.status, 'Submitted'); assert.ok(after1.stediCorrelationId)
+  assert.equal((await submitClaim(db, c1.id, actor)).ok, false) // never sent twice
 
   // The remaining steps use fixtures so they do not depend on payer responses. Claims 2 and 3 are
   // marked Submitted directly (they were never sent anywhere).
@@ -79,7 +81,7 @@ async function main() {
   step('reads: list / summary / denial queue / detail')
   const list = await listClaims(db, {}, 1, 25)
   assert.equal(list.total, 4)
-  assert.equal(list.claims[0].status, 'Denied') // problems first
+  assert.equal(list.claims[0].status, 'Rejected') // problems first: Rejected, then Denied
   const sum = await claimSummary(db)
   console.log({ openClaims: sum.openClaims, totalOutstanding: sum.totalOutstanding, avgDaysInAR: sum.avgDaysInAR, cleanClaimRate: sum.cleanClaimRate })
   assert.equal(sum.openClaims, 2) // partial paid + denied (c1 closed, c3 rejected is not AR)
