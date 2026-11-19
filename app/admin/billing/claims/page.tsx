@@ -58,7 +58,7 @@ export default function ClaimsListPage() {
         <Stat label="Total Outstanding" value={usd(s?.totalOutstanding)} sub={s ? `${s.openClaims} open claims` : undefined} />
         <Stat label="Avg Days in AR" value={s?.avgDaysInAR == null ? '-' : String(s.avgDaysInAR)} />
         <Stat label="Clean Claim Rate" value={s?.cleanClaimRate == null ? '-' : `${s.cleanClaimRate}%`} sub="Passed scrub first time, last 30 days" />
-        <Stat label="First-Pass Resolution" value={s?.firstPassResolutionRate == null ? '-' : `${s.firstPassResolutionRate}%`} sub={s ? `${s.queue.draft} draft / ${s.queue.ready} ready` : undefined} />
+        <Stat label="First-Pass Resolution" value={s?.firstPassResolutionRate == null ? '-' : `${s.firstPassResolutionRate}%`} sub="Paid on first adjudication, last 30 days" />
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
