@@ -479,3 +479,13 @@ export async function denialQueue(db: Db, f: ClaimFilters = {}) {
     groups: grouped,
   }
 }
+
+/** Parses the shared claim filter query params (list, summary and denials all take the same ones). */
+export function claimFiltersFrom(sp: URLSearchParams): ClaimFilters {
+  const g = (k: string) => sp.get(k)?.trim() || undefined
+  return {
+    status: g('status')?.split(',').filter(Boolean),
+    facilityId: g('facilityId'), providerId: g('providerId'), payerId: g('payerId'),
+    dateFrom: g('dateFrom'), dateTo: g('dateTo'), search: g('search'), aging: g('aging'),
+  }
+}
