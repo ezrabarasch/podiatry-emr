@@ -49,6 +49,11 @@ interface Patient {
   gender: string | null
   maritalStatus: string | null
   medicalRecordNumber: string | null
+  addressLine1: string | null
+  addressLine2: string | null
+  city: string | null
+  state: string | null
+  zipCode: string | null
   active: boolean
   coverages: Coverage[]
   // Summary only — the tabs page their own data.
@@ -655,8 +660,8 @@ export default function PatientPage() {
           <Card>
             <h3 className="text-sm font-semibold text-text mb-4">Contact & Address</h3>
             <dl className="grid grid-cols-2 gap-4">
-              <Detail label="Address" value="—" />
-              <Detail label="City / State" value="—" />
+              <Detail label="Address" value={[patient.addressLine1, patient.addressLine2].filter(Boolean).join(', ')} />
+              <Detail label="City / State / Zip" value={[patient.city, [patient.state, patient.zipCode].filter(Boolean).join(' ')].filter(Boolean).join(', ')} />
               <Detail label="Phone" value="—" />
               <Detail label="Email" value="—" />
               <Detail label="Emergency Contact" value={ec ? `${ecName}${ec.relationship ? ` (${ec.relationship})` : ''}` : '—'} />

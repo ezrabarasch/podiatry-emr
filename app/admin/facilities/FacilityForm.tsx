@@ -11,7 +11,15 @@ export interface FacilityFormValues {
   name: string
   facilityType: string
   practiceId: string
-  address: string
+  address: string // legacy single-string address; shown as a hint only
+  addressLine1: string
+  addressLine2: string
+  city: string
+  state: string
+  zipCode: string
+  phone: string
+  fax: string
+  tin: string
   npi: string
   posCode: string
   pccFacilityId: string
@@ -25,7 +33,8 @@ export interface FacilityFormValues {
 }
 
 export const emptyFacility: FacilityFormValues = {
-  name: '', facilityType: 'SNF', practiceId: '', address: '', npi: '', posCode: '', pccFacilityId: '',
+  name: '', facilityType: 'SNF', practiceId: '', address: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '',
+  phone: '', fax: '', tin: '', npi: '', posCode: '', pccFacilityId: '',
   adminContactName: '', adminContactPhone: '', adminContactEmail: '',
   donContactName: '', donContactPhone: '', donContactEmail: '', active: true,
 }
@@ -81,22 +90,64 @@ export default function FacilityForm({
           {practices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
-      <div>
-        <label className={labelCls}>Address <span className="text-slate-400">(optional)</span></label>
-        <input className={inputCls} value={form.address} onChange={set('address')} />
+      <div className="pt-2 border-t border-slate-100">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Address (CMS-1500 box 32, service facility)</p>
+        {form.address && !form.addressLine1 && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+            Legacy address on file: {form.address}. Fill in the fields below to replace it.
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={labelCls}>Address line 1</label>
+            <input className={inputCls} value={form.addressLine1} onChange={set('addressLine1')} />
+          </div>
+          <div>
+            <label className={labelCls}>Address line 2</label>
+            <input className={inputCls} value={form.addressLine2} onChange={set('addressLine2')} />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-4 mt-4">
+          <div>
+            <label className={labelCls}>City</label>
+            <input className={inputCls} value={form.city} onChange={set('city')} />
+          </div>
+          <div>
+            <label className={labelCls}>State</label>
+            <input className={inputCls} value={form.state} onChange={set('state')} maxLength={2} placeholder="FL" />
+          </div>
+          <div>
+            <label className={labelCls}>Zip code</label>
+            <input className={inputCls} value={form.zipCode} onChange={set('zipCode')} placeholder="33101" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <div>
+            <label className={labelCls}>Phone</label>
+            <input className={inputCls} value={form.phone} onChange={set('phone')} />
+          </div>
+          <div>
+            <label className={labelCls}>Fax</label>
+            <input className={inputCls} value={form.fax} onChange={set('fax')} />
+          </div>
+        </div>
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className={labelCls}>NPI <span className="text-slate-400">(optional)</span></label>
+          <label className={labelCls}>NPI <span className="text-slate-400">(facility NPI, if any)</span></label>
           <input className={inputCls} value={form.npi} onChange={set('npi')} />
         </div>
         <div>
-          <label className={labelCls}>POS Code <span className="text-slate-400">(optional)</span></label>
+          <label className={labelCls}>Tax ID / EIN <span className="text-slate-400">(9 digits)</span></label>
+          <input className={inputCls} value={form.tin} onChange={set('tin')} placeholder="12-3456789" />
+        </div>
+        <div>
+          <label className={labelCls}>POS Code</label>
           <input className={inputCls} value={form.posCode} onChange={set('posCode')} placeholder="31" />
         </div>
         <div>
-          <label className={labelCls}>PCC Facility ID <span className="text-slate-400">(optional)</span></label>
-          <input className={inputCls} value={form.pccFacilityId} onChange={set('pccFacilityId')} />
+          <label className={labelCls}>PCC Facility ID {showActive && <span className="text-slate-400">(read-only)</span>}</label>
+          <input className={`${inputCls} disabled:bg-slate-50 disabled:text-slate-500`} value={form.pccFacilityId} onChange={set('pccFacilityId')} disabled={showActive} />
         </div>
       </div>
 

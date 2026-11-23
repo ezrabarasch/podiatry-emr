@@ -13,10 +13,12 @@ export const CLAIM_TZ = 'America/New_York'
 export type PayerKind = 'MEDICARE' | 'MEDICAID' | 'COMMERCIAL' | 'OTHER'
 
 export interface ClaimVisit { id: string; visitDate: Date; note: { cptCodes: unknown; diagnoses: unknown } | null }
-export interface ClaimPatient { firstName: string; lastName: string; dob: Date; gender: string | null }
+/** Structured address as stored on patients (PCC sync) and facilities (admin form). */
+export interface AddrFields { addressLine1?: string | null; addressLine2?: string | null; city?: string | null; state?: string | null; zipCode?: string | null }
+export interface ClaimPatient { firstName: string; lastName: string; dob: Date; gender: string | null; addr?: AddrFields }
 export interface ClaimCoverage { payerName: string; payerType: PayerKind; memberId: string | null; groupId: string | null }
 export interface ClaimProvider { firstName: string; lastName: string; credentials: string | null; npi: string | null; phone: string | null }
-export interface ClaimFacility { name: string; facilityType: string; address: string | null; npi: string | null; posCode: string | null }
+export interface ClaimFacility { name: string; facilityType: string; address: string | null; npi: string | null; posCode: string | null; addr?: AddrFields }
 export interface ClaimPractice { name: string; tin: string | null; groupNpi: string | null; address: string | null; phone: string | null }
 
 export interface ClaimContext {
@@ -70,6 +72,22 @@ export function parseAddress(a: string | null | undefined): { address1: string; 
   if (!m) return null
   return { address1: m[1].trim(), city: m[2].trim(), state: m[3].toUpperCase(), postalCode: m[4] + (m[5] ?? '') }
 }
+
+export interface ClaimAddress { address1: string; address2?: string; city: string; state: string; postalCode: string }
+
+/** A structured address if it is complete (street, city, 2-letter state, 5- or 9-digit ZIP), else null. */
+export function structuredAddress(a: AddrFields | null | undefined): ClaimAddress | null {
+  const address1 = a?.addressLine1?.trim()
+  const city = a?.city?.trim()
+  const state = a?.state?.trim().toUpperCase()
+  const zip = digits(a?.zipCode)
+  if (!address1 || !city || !state || !/^[A-Z]{2}$/.test(state) || (zip.length !== 5 && zip.length !== 9)) return null
+  return { address1, address2: a?.addressLine2?.trim() || undefined, city, state, postalCode: zip }
+}
+
+/** Structured fields when complete, else the legacy single-string address. */
+export const resolveAddress = (a: AddrFields | null | undefined, legacy: string | null | undefined): ClaimAddress | null =>
+  structuredAddress(a) ?? parseAddress(legacy)
 
 export const isEM = (cpt: string): boolean => /^99[2-4]\d\d$/.test(cpt)
 
@@ -152,14 +170,16 @@ export function buildClaim(ctx: ClaimContext): ClaimDraft {
   const totalCharges = lines.reduce((s, l) => s + l.chargeAmount * l.units, 0)
 
   const dos = compact(ymdInTz(visit.visitDate))
-  const facAddr = parseAddress(facility.address)
+  const facAddr = resolveAddress(facility.addr, facility.address)
+  // CMS-1500 box 5: the patient's own address; the facility's only when PCC gave us none.
+  const patAddr = structuredAddress(patient.addr) ?? facAddr
   const prAddr = parseAddress(practice?.address)
   const tin = digits(practice?.tin)
   const billingNpi = practice?.groupNpi?.trim() || provider.npi?.trim() || ''
   const taxonomy = (provider.credentials ?? '').toUpperCase().includes('DPM') ? '213E00000X' : undefined
   const gender = (patient.gender ?? '').trim().charAt(0).toUpperCase()
   const payerKind: PayerKind = coverage?.payerType ?? 'OTHER'
-  const addr = (a: ReturnType<typeof parseAddress>) => a ? { address1: a.address1, city: a.city, state: a.state, postalCode: a.postalCode } : undefined
+  const addr = (a: ClaimAddress | null) => a ? { address1: a.address1, address2: a.address2, city: a.city, state: a.state, postalCode: a.postalCode } : undefined
 
   const payload: Record<string, unknown> = {
     usageIndicator: CLAIM_USAGE_INDICATOR,
@@ -171,8 +191,7 @@ export function buildClaim(ctx: ClaimContext): ClaimDraft {
       contactInformation: { name: practice?.name ?? '', phoneNumber: digits(practice?.phone) || undefined },
     },
     receiver: { organizationName: coverage?.payerName ?? '' },
-    // SNF residents are their own subscriber. Patient address = the facility's address
-    // (the EMR holds no patient address) - a known limitation, see the billing report.
+    // SNF residents are their own subscriber.
     subscriber: {
       memberId: coverage?.memberId ?? '',
       paymentResponsibilityLevelCode: 'P',
@@ -181,7 +200,7 @@ export function buildClaim(ctx: ClaimContext): ClaimDraft {
       gender: gender === 'M' || gender === 'F' ? gender : 'U',
       dateOfBirth: compact(patient.dob.toISOString().slice(0, 10)),
       groupNumber: coverage?.groupId || undefined,
-      address: addr(facAddr),
+      address: addr(patAddr),
     },
     billing: {
       providerType: 'BillingProvider',
@@ -269,7 +288,7 @@ export function scrubClaim(ctx: ClaimContext, opts: { duplicateOf?: string | nul
 
   if (!provider.npi || !/^\d{10}$/.test(provider.npi.trim())) errors.push('Rendering provider has no valid 10-digit NPI')
   if (!effectivePos(facility)) errors.push('Facility has no place-of-service code')
-  if (!parseAddress(facility.address)) errors.push('Facility address is missing or not in "street, city, ST ZIP" form')
+  if (!resolveAddress(facility.addr, facility.address)) errors.push('Facility address is missing or incomplete (street, city, state and ZIP are required)')
   if (!practice) errors.push('Facility is not linked to a practice (billing provider)')
   else {
     if (digits(practice.tin).length !== 9) errors.push('Practice TIN (EIN) is missing or not 9 digits')

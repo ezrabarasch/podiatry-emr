@@ -69,10 +69,10 @@ export async function loadClaimContext(db: Db, visitId: string, patientControlNu
   const fees = await db.feeScheduleItem.findMany({ where: { cptCode: { in: codes } } })
   return {
     visit: { id: visit.id, visitDate: visit.visitDate, note: visit.note ? { cptCodes: visit.note.cptCodes, diagnoses: visit.note.diagnoses } : null },
-    patient: { firstName: p.firstName, lastName: p.lastName, dob: p.dob, gender: p.gender },
+    patient: { firstName: p.firstName, lastName: p.lastName, dob: p.dob, gender: p.gender, addr: p },
     coverage: cov ? { payerName: cov.payerName, payerType: cov.payerType, memberId: cov.memberId, groupId: cov.groupId } : null,
     provider: { firstName: visit.provider.firstName, lastName: visit.provider.lastName, credentials: visit.provider.credentials, npi: visit.provider.npi, phone: visit.provider.phone },
-    facility: { name: p.facility.name, facilityType: p.facility.facilityType, address: p.facility.address, npi: p.facility.npi, posCode: p.facility.posCode },
+    facility: { name: p.facility.name, facilityType: p.facility.facilityType, address: p.facility.address, npi: p.facility.npi, posCode: p.facility.posCode, addr: p.facility },
     practice: p.facility.practice ? { name: p.facility.practice.name, tin: p.facility.practice.tin, groupNpi: p.facility.practice.groupNpi, address: p.facility.practice.address, phone: p.facility.practice.phone } : null,
     fees: Object.fromEntries(fees.map(f => [f.cptCode, Number(f.amount)])),
     payerId: cov ? await resolvePayerId(db, cov.payerName, cov.payerType) : null,

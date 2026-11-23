@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { FacilityType, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
+import { parseFacilityBilling } from '@/lib/facility-billing'
 
 const trimOrNull = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
@@ -24,9 +25,13 @@ export async function POST(req: Request) {
   }
   if (!b.practiceId?.trim()) return NextResponse.json({ error: 'Practice is required' }, { status: 400 })
 
+  const billing = parseFacilityBilling(b)
+  if ('error' in billing) return NextResponse.json({ error: billing.error }, { status: 400 })
+
   try {
     const facility = await prisma.facility.create({
       data: {
+        ...billing.data,
         name: b.name.trim(),
         facilityType: b.facilityType,
         practiceId: b.practiceId.trim(),

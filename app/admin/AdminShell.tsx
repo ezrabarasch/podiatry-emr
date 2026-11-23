@@ -13,6 +13,7 @@ const TABS = [
   { href: '/admin/integrations', label: 'Integrations' },
   { href: '/admin/billing', label: 'Billing' },
   { href: '/admin/billing/claims', label: 'Claims' },
+  { href: '/admin/billing/fee-schedule', label: 'Fee Schedule' },
   { href: '/admin/careflow-rules', label: 'Careflow Rules' },
   { href: '/admin/sessions', label: 'Session Log' },
 ]

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { FacilityType, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
+import { parseFacilityBilling } from '@/lib/facility-billing'
 
 const trimOrNull = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
@@ -40,7 +41,10 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   if (b.address !== undefined) data.address = trimOrNull(b.address)
   if (b.npi !== undefined) data.npi = trimOrNull(b.npi)
   if (b.posCode !== undefined) data.posCode = trimOrNull(b.posCode)
-  if (b.pccFacilityId !== undefined) data.pccFacilityId = trimOrNull(b.pccFacilityId)
+  // pccFacilityId is read-only after creation (it links PCC patients to this facility).
+  const billing = parseFacilityBilling(b)
+  if ('error' in billing) return NextResponse.json({ error: billing.error }, { status: 400 })
+  Object.assign(data, billing.data)
   if (b.adminContactName !== undefined) data.adminContactName = trimOrNull(b.adminContactName)
   if (b.adminContactPhone !== undefined) data.adminContactPhone = trimOrNull(b.adminContactPhone)
   if (b.adminContactEmail !== undefined) data.adminContactEmail = trimOrNull(b.adminContactEmail)

@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
 import { buildClaim, deriveModifiers, effectivePos, generatePatientControlNumberFrom, parseAddress, scrubClaim, ymdInTz, type ClaimContext } from '../lib/claims'
+import { normalizeFee, parseFeeCsv } from '../lib/fee-schedule'
 import { computeEraOutcome, outcomeOf, parse277Report, parseEraReport, parseX12Statuses, verifyStediSignature } from '../lib/claims-stedi'
 
 const base = (): ClaimContext => ({
@@ -67,7 +68,20 @@ assert.equal(p.billing.taxonomyCode, '213E00000X')
 assert.equal(p.billing.address.postalCode, '331391234')
 assert.equal(p.subscriber.dateOfBirth, '19331104')
 assert.equal(p.subscriber.gender, 'F')
-assert.equal(p.subscriber.address.city, 'Miami')
+assert.equal(p.subscriber.address.city, 'Miami') // no patient address -> facility fallback
+// patient address wins; facility structured address beats the legacy string
+{
+  const c = base()
+  c.patient.addr = { addressLine1: '9 Elm Ave', addressLine2: 'Apt 2', city: 'Tampa', state: 'fl', zipCode: '33602-1234' }
+  c.facility.addr = { addressLine1: '1 Care Way', city: 'Orlando', state: 'FL', zipCode: '32801' }
+  const q = buildClaim(c).payload as any
+  assert.deepEqual(q.subscriber.address, { address1: '9 Elm Ave', address2: 'Apt 2', city: 'Tampa', state: 'FL', postalCode: '336021234' })
+  assert.equal(q.claimInformation.serviceFacilityLocation.address.city, 'Orlando')
+  c.patient.addr = { addressLine1: '9 Elm Ave', city: 'Tampa', state: 'Florida', zipCode: '336' } // incomplete -> fallback
+  assert.equal((buildClaim(c).payload as any).subscriber.address.city, 'Orlando')
+  c.facility.addr = { addressLine1: '1 Care Way' }; c.facility.address = null // incomplete + no legacy
+  assert.ok(scrubClaim(c).errors.some(e => /Facility address/.test(e)))
+}
 assert.equal(JSON.stringify(p).includes('null'), false) // no nulls/holes in what we send
 assert.deepEqual(d.diagnoses.map(x => [x.pointer, x.icd10, x.rank]), [['A', 'L60.0', 'Primary'], ['B', 'I10', 'Secondary'], ['C', 'L84', 'Diagnosis #3']])
 assert.equal(d.totalCharges, 220)
@@ -171,5 +185,17 @@ assert.equal(verifyStediSignature(hdr(), body, 'whsec_' + Buffer.from('other').t
 assert.equal(verifyStediSignature(hdr({ timestamp: String(Number(ts) - 3600) }), body, secret), false) // stale / replay
 assert.equal(verifyStediSignature({ id: null, timestamp: null, signature: null }, body, secret), false)
 assert.equal(verifyStediSignature(hdr(), body, ''), false)
+
+// ── fee schedule parsing ──
+{
+  const r = parseFeeCsv('cpt_code,description,amount\n11721,"Debridement, nails 6+",$85.00\n99308,Subsequent NF care,125\n11721,dup wins,90')
+  assert.deepEqual(r.errors, [])
+  assert.deepEqual(r.items, [{ cptCode: '11721', amount: 90, description: 'dup wins' }, { cptCode: '99308', amount: 125, description: 'Subsequent NF care' }])
+  assert.deepEqual(parseFeeCsv('11720\t85\n  g0127 , "1,234.50"').items.map(i => [i.cptCode, i.amount]), [['11720', 85], ['G0127', 1234.5]]) // tab pair + comma-grouped amount (3 cells)
+  const bad = parseFeeCsv('1172,85\n11721,0\n11722,abc\n11723,100000.01')
+  assert.equal(bad.errors.length, 4); assert.match(bad.errors[0], /^Line 1:/)
+  assert.deepEqual(parseFeeCsv('').errors, ['No rows found'])
+  assert.equal(typeof normalizeFee('11721', 85.555), 'object'); assert.equal((normalizeFee('11721', 85.555) as { amount: number }).amount, 85.56)
+}
 
 console.log('claims selftest: all assertions passed')

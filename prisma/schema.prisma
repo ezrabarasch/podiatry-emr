@@ -74,7 +74,15 @@ model Facility {
   id            String       @id @default(uuid())
   name          String
   facilityType  FacilityType
-  address       String?
+  address       String?      // legacy single-string "street, city, ST ZIP"; structured fields below win
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  state         String?
+  zipCode       String?
+  phone         String?
+  fax           String?
+  tin           String?      // facility EIN, stored for reference (claims bill under the practice TIN)
   npi           String?
   posCode       String?      // Place of Service code (e.g. "31" SNF, "13" ALF)
   pccFacilityId String?      // PCC's internal facility ID for linking
@@ -226,6 +234,13 @@ model Patient {
   gender          String?
   maritalStatus   String?
   medicalRecordNumber String?
+  // Home address from PCC GET /patients/{id} previousAddress.* (not in the list endpoint).
+  addressLine1    String?
+  addressLine2    String?
+  city            String?
+  state           String?
+  zipCode         String?
+  county          String?
   isDeceased      Boolean   @default(false)
   active       Boolean      @default(true)
   createdAt    DateTime     @default(now())
@@ -1087,6 +1102,7 @@ model ClaimNote {
 model FeeScheduleItem {
   id        String   @id @default(uuid())
   cptCode   String   @unique @db.VarChar(5)
+  description String?
   amount    Decimal  @db.Decimal(10, 2)
   updatedAt DateTime @updatedAt
 
