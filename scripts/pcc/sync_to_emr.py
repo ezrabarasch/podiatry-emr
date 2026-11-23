@@ -198,6 +198,17 @@ def payer_type(v):
 
 # ── pre-existing resources (patients, coverages, diagnoses) ───────────────────
 
+def _set_address(cur, emr_id, a):
+    """PCC GET /patients/{id} -> previousAddress{addressLine1,addressLine2,city,state,postalCode,county}.
+    The list endpoint omits it, so callers only invoke this when the key is present."""
+    a = a or {}
+    v = lambda k: (str(a.get(k)).strip() or None) if a.get(k) is not None else None
+    cur.execute(
+        'UPDATE patients SET "addressLine1"=%s, "addressLine2"=%s, city=%s, state=%s, "zipCode"=%s, county=%s WHERE id=%s',
+        [v("addressLine1"), v("addressLine2"), v("city"), v("state"), v("postalCode"), v("county"), emr_id],
+    )
+
+
 def sync_patients(cur):
     """Refresh demographics of EMR patients already linked to PCC."""
     # /patients/{id} returns a flat object, not a paginated 'data' list, so this
@@ -221,6 +232,8 @@ def sync_patients(cur):
                 dt(p.get("admissionDate")), dt(p.get("dischargeDate")), emr_id,
             ],
         )
+        if "previousAddress" in p:
+            _set_address(cur, emr_id, p["previousAddress"])
         n += 1
     return n
 
